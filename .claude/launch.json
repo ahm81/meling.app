@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "emulators",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "firebase", "emulators:start", "--only", "auth,firestore,storage"],
+      "port": 4000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@meling/web", "dev"],
+      "port": 5173
+    }
+  ]
+}

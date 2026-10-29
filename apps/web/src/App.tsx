@@ -23,8 +23,24 @@ async function resolveAccess(user: User | null): Promise<Access> {
 
 export function App() {
   const [access, setAccess] = useState<Access>({ state: "loading" });
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   useEffect(() => onAuthStateChanged(auth, (user) => void resolveAccess(user).then(setAccess)), []);
+
+  async function signIn() {
+    setSignInError(null);
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
+      setSignInError(
+        code === "auth/popup-blocked"
+          ? "Nettleseren blokkerte innloggingsvinduet. Tillat popup-vinduer for meling.app og prøv igjen."
+          : "Innloggingen feilet. Prøv igjen.",
+      );
+    }
+  }
 
   return (
     <main>
@@ -34,7 +50,10 @@ export function App() {
       {access.state === "loading" && <p>Laster…</p>}
 
       {access.state === "signedOut" && (
-        <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}>Logg inn med Google</button>
+        <>
+          <button onClick={signIn}>Logg inn med Google</button>
+          {signInError && <p role="alert">{signInError}</p>}
+        </>
       )}
 
       {access.state === "denied" && (
