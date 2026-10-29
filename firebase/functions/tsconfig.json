@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // @meling/shared is resolved via paths and bundled by tsup, so the deployed
+    // package.json has no workspace: dependencies that Cloud Build can't install.
+    "paths": {
+      "@meling/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "tsup.config.ts"]
+}

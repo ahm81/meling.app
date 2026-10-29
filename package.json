@@ -1,0 +1,22 @@
+{
+  "name": "meling-app",
+  "private": true,
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "emulators": "firebase emulators:start --import=.firebase-data --export-on-exit",
+    "test:rules": "firebase emulators:exec --only firestore,storage \"pnpm --filter @meling/firebase-tests test:rules\"",
+    "deploy": "turbo run build && firebase deploy"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.24.0",
+    "turbo": "^2.11.10",
+    "typescript": "^7.0.2"
+  }
+}
