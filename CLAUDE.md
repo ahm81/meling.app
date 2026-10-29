@@ -1,6 +1,6 @@
 # meling.app
 
-Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjenester som for eksempel en julekalender. Ingen åpen registrering. Firebase-prosjekt: `meling-app` (functions-region `europe-west1`). Domene: meling.app.
+Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjenester som for eksempel en julekalender. Ingen åpen registrering. Firebase-prosjekt: `meling-app` (Blaze, Firestore `eur3`, Storage `EU`, functions-region `europe-west1`). Domene: meling.app.
 
 ## Struktur
 
@@ -36,3 +36,17 @@ cd apps/apple/Packages/MelingKit && swift test
 
 Apple-appene konfigurerer Firebase bare hvis `GoogleService-Info.plist` finnes i app-bundlen.
 Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
+
+## CI/CD
+
+- `.github/workflows/js.yml`: typecheck, tester, bygg og regeltester på PR-er (gjenbrukes av deploy).
+- `.github/workflows/apple.yml`: MelingCore-tester og bygg av iOS, macOS og tvOS på PR-er.
+- `.github/workflows/preview.yml`: web deployes til en Hosting-forhåndsvisning (`pr-<nr>`, 7 dager) på PR-er fra repoet.
+- `.github/workflows/deploy.yml`: ved push til main kjøres sjekkene, deretter `firebase deploy --force` til `meling-app`.
+- Autentisering mot Google Cloud skjer med Workload Identity (ingen nøkler i GitHub), med to kontoer:
+  `github-deployer` (full deploy, kun GitHub-miljøet `production`, som bare `main` kan bruke) og
+  `github-preview` (kun Hosting, kun `pull_request`-jobber).
+  Engangsoppsett: `scripts/setup-github-deploy.sh`. Repo-variablene er
+  `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
+- Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.
+- Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`. Den er offentlig og ikke hemmelig.

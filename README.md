@@ -23,3 +23,9 @@ open Meling.xcodeproj
 ```
 
 Se [CLAUDE.md](CLAUDE.md) for struktur og konvensjoner, og [docs/datamodel.md](docs/datamodel.md) for datamodellen.
+
+## Deploy
+
+Alt som merges til `main` deployes automatisk til Firebase (`meling-app`), og PR-er får en
+forhåndsvisning av web-appen. Engangsoppsettet for GitHub Actions gjøres med
+`./scripts/setup-github-deploy.sh` (krever eierrettigheter i `meling-app`).
