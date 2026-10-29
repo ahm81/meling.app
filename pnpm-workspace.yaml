@@ -1,0 +1,12 @@
+packages:
+  - apps/web
+  - packages/*
+  - firebase/functions
+  - firebase/tests
+  - firebase/admin
+allowBuilds:
+  '@firebase/util': true
+  esbuild: true
+  protobufjs: true
+  # Optional native regex engine for firebase-tools; not needed.
+  re2: false

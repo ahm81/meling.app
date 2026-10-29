@@ -1,0 +1,34 @@
+name: Apple
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "apps/apple/**"
+      - ".github/workflows/apple.yml"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/apple
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: MelingCore-tester
+        run: swift test --package-path Packages/MelingKit --filter MelingCoreTests
+      - name: Bygg alle plattformer
+        run: |
+          set -o pipefail
+          for scheme in Meling-iOS Meling-macOS Meling-tvOS; do
+            case $scheme in
+              Meling-iOS) dest="generic/platform=iOS Simulator" ;;
+              Meling-macOS) dest="generic/platform=macOS" ;;
+              Meling-tvOS) dest="generic/platform=tvOS Simulator" ;;
+            esac
+            xcodebuild -project Meling.xcodeproj -scheme "$scheme" -destination "$dest" \
+              CODE_SIGNING_ALLOWED=NO build | xcbeautify
+          done

@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: ./.github/workflows/js.yml
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://meling-app.web.app
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: |
+          test -n "$VITE_FIREBASE_API_KEY" || { echo "::error::Repository variable FIREBASE_WEB_API_KEY is not set"; exit 1; }
+          pnpm build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+      # Keyless auth via Workload Identity Federation; see scripts/setup-github-deploy.sh.
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      # --force: delete functions removed from source and accept the image cleanup policy
+      # without prompting. The repo is the source of truth for what is deployed.
+      - run: pnpm exec firebase deploy --project meling-app --non-interactive --force

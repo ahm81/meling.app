@@ -1,0 +1,91 @@
+name: Preview
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - "firebase.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/preview.yml"
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs the PR's code (dependencies and build) without any cloud credentials.
+  build:
+    # Forks get no OIDC token and must not deploy to the project.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: |
+          test -n "$VITE_FIREBASE_API_KEY" || { echo "::error::Repository variable FIREBASE_WEB_API_KEY is not set"; exit 1; }
+          pnpm --filter @meling/web build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 1
+
+  # Mints credentials but runs no project code: only the locked CLI is checked out and
+  # installed (without install scripts, before credentials exist), the site is the prebuilt
+  # artifact, and the hosting config is written here (a repo firebase.json could carry
+  # predeploy hooks).
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: preview
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: tools/firebase-cli
+          sparse-checkout-cone-mode: false
+      - name: Hosting config (keep in sync with firebase.json)
+        run: |
+          cat > firebase.json <<'JSON'
+          { "hosting": { "public": "apps/web/dist", "rewrites": [{ "source": "**", "destination": "/index.html" }] } }
+          JSON
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-dist
+          path: apps/web/dist
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tools/firebase-cli
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_PREVIEW_SERVICE_ACCOUNT }}
+      - id: deploy
+        run: |
+          tools/firebase-cli/node_modules/.bin/firebase hosting:channel:deploy "pr-${{ github.event.pull_request.number }}" \
+            --project meling-app --expires 7d --non-interactive --json > deploy.json \
+            || { cat deploy.json; exit 1; }
+          echo "url=$(jq -r '.result["meling-app"].url' deploy.json)" >> "$GITHUB_OUTPUT"
+          echo "expires=$(jq -r '.result["meling-app"].expireTime' deploy.json)" >> "$GITHUB_OUTPUT"
+      - uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2.9.4
+        with:
+          header: preview
+          message: |
+            Forhåndsvisning av web: ${{ steps.deploy.outputs.url }}
+            Utløper ${{ steps.deploy.outputs.expires }}. Bruker produksjonsdata i meling-app.

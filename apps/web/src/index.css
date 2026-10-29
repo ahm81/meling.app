@@ -1,0 +1,26 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+}
+
+main {
+  max-width: 40rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  justify-self: start;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: #fde68a;
+  color: #78350f;
+  font-size: 0.875rem;
+}

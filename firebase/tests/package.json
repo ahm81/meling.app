@@ -1,0 +1,17 @@
+{
+  "name": "@meling/firebase-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:rules": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "@meling/shared": "workspace:*",
+    "firebase": "^13.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
