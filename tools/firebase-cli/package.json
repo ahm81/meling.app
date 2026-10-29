@@ -1,0 +1,8 @@
+{
+  "name": "meling-firebase-cli",
+  "private": true,
+  "description": "Locked firebase-tools for CI jobs that hold cloud credentials (see .github/workflows/preview.yml). Not part of the pnpm workspace.",
+  "dependencies": {
+    "firebase-tools": "15.34.1"
+  }
+}

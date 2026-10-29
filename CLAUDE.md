@@ -49,4 +49,8 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
   Engangsoppsett: `scripts/setup-github-deploy.sh`. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
 - Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.
-- Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`. Den er offentlig og ikke hemmelig.
+- Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`, men API-nøkkelen committes aldri. CI setter
+  `VITE_FIREBASE_API_KEY` fra repo-variabelen `FIREBASE_WEB_API_KEY`. Nøkkelen er begrenset til våre domener og til
+  Auth, Firestore, Storage og Installations. Lokalt prod-bygg: legg den i `apps/web/.env.production.local`.
+- Jobber med tilgang til Google Cloud kjører ikke prosjektkode. `firebase-tools` installeres fra lockfilen i
+  `tools/firebase-cli` med `npm ci --ignore-scripts`.

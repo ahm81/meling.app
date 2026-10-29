@@ -30,16 +30,22 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @meling/web build
+      - name: Build
+        run: |
+          test -n "$VITE_FIREBASE_API_KEY" || { echo "::error::Repository variable FIREBASE_WEB_API_KEY is not set"; exit 1; }
+          pnpm --filter @meling/web build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-dist
           path: apps/web/dist
           retention-days: 1
 
-  # Mints credentials but runs no project code: no checkout, the site is the prebuilt
-  # artifact, firebase-tools is a pinned published version, and the hosting config is written
-  # here (a repo firebase.json could carry predeploy hooks).
+  # Mints credentials but runs no project code: only the locked CLI is checked out and
+  # installed (without install scripts, before credentials exist), the site is the prebuilt
+  # artifact, and the hosting config is written here (a repo firebase.json could carry
+  # predeploy hooks).
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -49,6 +55,10 @@ jobs:
       id-token: write
       pull-requests: write
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: tools/firebase-cli
+          sparse-checkout-cone-mode: false
       - name: Hosting config (keep in sync with firebase.json)
         run: |
           cat > firebase.json <<'JSON'
@@ -61,13 +71,14 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tools/firebase-cli
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_PREVIEW_SERVICE_ACCOUNT }}
       - id: deploy
         run: |
-          npx --yes firebase-tools@15.34.1 hosting:channel:deploy "pr-${{ github.event.pull_request.number }}" \
+          tools/firebase-cli/node_modules/.bin/firebase hosting:channel:deploy "pr-${{ github.event.pull_request.number }}" \
             --only hosting --project meling-app --expires 7d --non-interactive --json > deploy.json
           echo "url=$(jq -r '.result["meling-app"].url' deploy.json)" >> "$GITHUB_OUTPUT"
           echo "expires=$(jq -r '.result["meling-app"].expireTime' deploy.json)" >> "$GITHUB_OUTPUT"
