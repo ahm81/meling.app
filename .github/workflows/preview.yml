@@ -79,7 +79,7 @@ jobs:
       - id: deploy
         run: |
           tools/firebase-cli/node_modules/.bin/firebase hosting:channel:deploy "pr-${{ github.event.pull_request.number }}" \
-            --only hosting --project meling-app --expires 7d --non-interactive --json > deploy.json \
+            --project meling-app --expires 7d --non-interactive --json > deploy.json \
             || { cat deploy.json; exit 1; }
           echo "url=$(jq -r '.result["meling-app"].url' deploy.json)" >> "$GITHUB_OUTPUT"
           echo "expires=$(jq -r '.result["meling-app"].expireTime' deploy.json)" >> "$GITHUB_OUTPUT"
