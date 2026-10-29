@@ -45,11 +45,13 @@ for role in roles/firebase.admin roles/cloudfunctions.admin roles/run.viewer \
   roles/artifactregistry.admin roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer; do
   grant "$DEPLOY_SA" "$role"
 done
-# Functions run as the default compute service account; the deployer must be able to act as it.
-echo "  roles/iam.serviceAccountUser on the default compute service account"
-gcloud iam service-accounts add-iam-policy-binding \
-  "$PROJECT_NUMBER-compute@developer.gserviceaccount.com" --project "$PROJECT" \
-  --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser --quiet >/dev/null
+# Functions run as the default compute service account, and firebase-tools also requires actAs on
+# the App Engine default service account before any functions deploy.
+for runtime_sa in "$PROJECT_NUMBER-compute@developer.gserviceaccount.com" "$PROJECT@appspot.gserviceaccount.com"; do
+  echo "  roles/iam.serviceAccountUser on $runtime_sa"
+  gcloud iam service-accounts add-iam-policy-binding "$runtime_sa" --project "$PROJECT" \
+    --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser --quiet >/dev/null
+done
 
 echo "Service account $PREVIEW_SA"
 ensure_sa github-preview "GitHub Actions preview ($REPO, pull requests)"
