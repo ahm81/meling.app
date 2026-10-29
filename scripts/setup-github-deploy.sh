@@ -38,10 +38,11 @@ grant() {
 echo "Service account $DEPLOY_SA"
 ensure_sa github-deployer "GitHub Actions deploy ($REPO, production)"
 # Hosting, rules and indexes (firebase.admin), Cloud Functions 2nd gen (cloudfunctions.admin,
-# run.viewer, artifactregistry.admin for the image cleanup policy), and reading the API key
-# config during hosting deploys (apiKeysViewer).
+# run.viewer, artifactregistry.admin for the image cleanup policy), reading the API key config
+# during hosting deploys (apiKeysViewer), and checking that required APIs are enabled
+# (serviceUsageViewer; the CLI does this before every deploy).
 for role in roles/firebase.admin roles/cloudfunctions.admin roles/run.viewer \
-  roles/artifactregistry.admin roles/serviceusage.apiKeysViewer; do
+  roles/artifactregistry.admin roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer; do
   grant "$DEPLOY_SA" "$role"
 done
 # Functions run as the default compute service account; the deployer must be able to act as it.
@@ -62,7 +63,7 @@ gcloud iam roles describe previewAuthDomains --project "$PROJECT" >/dev/null 2>&
     --description="Lets PR preview deploys add their domain to Firebase Auth authorized domains." \
     --permissions=firebaseauth.configs.get,firebaseauth.configs.update --stage=GA
 for role in roles/firebasehosting.admin "projects/$PROJECT/roles/previewAuthDomains" \
-  roles/run.viewer roles/serviceusage.apiKeysViewer; do
+  roles/run.viewer roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer; do
   grant "$PREVIEW_SA" "$role"
 done
 
