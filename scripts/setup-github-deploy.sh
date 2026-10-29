@@ -52,7 +52,10 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 echo "Service account $PREVIEW_SA"
 ensure_sa github-preview "GitHub Actions preview ($REPO, pull requests)"
-for role in roles/firebasehosting.admin roles/serviceusage.apiKeysViewer; do
+# Same roles as `firebase init hosting:github`. firebaseauth.admin lets a channel deploy add the
+# preview domain to Auth's authorized domains, so Google sign-in works on previews.
+for role in roles/firebasehosting.admin roles/firebaseauth.admin roles/run.viewer \
+  roles/serviceusage.apiKeysViewer; do
   grant "$PREVIEW_SA" "$role"
 done
 
