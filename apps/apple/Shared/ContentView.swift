@@ -1,4 +1,3 @@
-import MelingCore
 import SwiftUI
 
 struct ContentView: View {
@@ -9,7 +8,7 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
             Text("Meling")
                 .font(.title)
-            Text("Roller: \(MemberRole.allCases.map(\.rawValue).joined(separator: ", "))")
+            Text("Kun for Meling-familien")
                 .foregroundStyle(.secondary)
         }
         .padding()

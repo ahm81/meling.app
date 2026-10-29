@@ -3,6 +3,7 @@ packages:
   - packages/*
   - firebase/functions
   - firebase/tests
+  - firebase/admin
 allowBuilds:
   '@firebase/util': true
   esbuild: true

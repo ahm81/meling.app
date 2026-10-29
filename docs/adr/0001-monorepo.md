@@ -1,6 +1,6 @@
 # 0001 – Monorepo for alle klienter og backend
 
-**Status:** Akseptert (2026-10-29)
+**Status:** Akseptert (2026-10-29). Datamodellen er forenklet i [0002](0002-kun-for-meling-familien.md).
 
 ## Kontekst
 

@@ -26,37 +26,41 @@ afterAll(() => env.cleanup());
 beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await setDoc(doc(db, paths.family("f1")), { name: "Meling", ownerId: "alice", memberIds: ["alice"] });
-    await setDoc(doc(db, paths.member("f1", "alice")), { displayName: "Alice", role: "parent" });
+    await setDoc(doc(ctx.firestore(), paths.member("amund")), {
+      displayName: "Amund",
+      email: "amund@example.com",
+    });
   });
 });
 
-describe("families", () => {
-  it("lets members read their family", async () => {
-    const db = env.authenticatedContext("alice").firestore();
-    await assertSucceeds(getDoc(doc(db, paths.family("f1"))));
+describe("members", () => {
+  it("lets members read the member list", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(getDoc(doc(db, paths.member("amund"))));
   });
 
-  it("denies non-members", async () => {
-    const db = env.authenticatedContext("mallory").firestore();
-    await assertFails(getDoc(doc(db, paths.family("f1"))));
+  it("denies signed-in users who are not members", async () => {
+    const db = env.authenticatedContext("stranger").firestore();
+    await assertFails(getDoc(doc(db, paths.member("amund"))));
   });
 
-  it("denies clients from adding themselves as members", async () => {
-    const db = env.authenticatedContext("mallory").firestore();
-    await assertFails(updateDoc(doc(db, paths.family("f1")), { memberIds: ["alice", "mallory"] }));
-  });
-});
-
-describe("users", () => {
-  it("lets a user create their own profile", async () => {
-    const db = env.authenticatedContext("alice").firestore();
-    await assertSucceeds(setDoc(doc(db, paths.user("alice")), { displayName: "Alice" }));
+  it("denies unauthenticated users", async () => {
+    const db = env.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, paths.member("amund"))));
   });
 
-  it("denies writing familyIds from the client", async () => {
-    const db = env.authenticatedContext("alice").firestore();
-    await assertFails(setDoc(doc(db, paths.user("alice")), { displayName: "Alice", familyIds: ["f1"] }));
+  it("denies adding yourself as a member", async () => {
+    const db = env.authenticatedContext("stranger").firestore();
+    await assertFails(setDoc(doc(db, paths.member("stranger")), { displayName: "X", email: "x@example.com" }));
+  });
+
+  it("lets a member change their own display name", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(updateDoc(doc(db, paths.member("amund")), { displayName: "Amund M." }));
+  });
+
+  it("denies a member changing their email", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(updateDoc(doc(db, paths.member("amund")), { email: "other@example.com" }));
   });
 });

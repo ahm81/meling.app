@@ -1,6 +1,6 @@
 # meling.app
 
-Familieapp. Firebase-prosjekt: `meling-app` (functions-region `europe-west1`). Domene: meling.app.
+Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjenester som for eksempel en julekalender. Ingen åpen registrering. Firebase-prosjekt: `meling-app` (functions-region `europe-west1`). Domene: meling.app.
 
 ## Struktur
 
@@ -9,14 +9,15 @@ Familieapp. Firebase-prosjekt: `meling-app` (functions-region `europe-west1`). D
   - `Packages/MelingKit` – `MelingCore` (modeller, alle plattformer) og `MelingFirebase` (ikke watchOS).
   - `Shared/` – SwiftUI-kode felles for iOS, macOS og tvOS.
 - `packages/shared` – zod-skjemaer, typer og Firestore-stier for web og functions.
-- `firebase/` – `functions/` (TS, bundles med tsup), `firestore.rules`, `storage.rules`, `tests/` (regeltester).
+- `firebase/` – `functions/` (TS, bundles med tsup), `admin/` (admin-skript som `add-member`), `firestore.rules`, `storage.rules`, `tests/` (regeltester).
 - `docs/datamodel.md` – kontrakten for Firestore. `docs/adr/` – arkitekturbeslutninger.
 
 ## Regler
 
 - Endringer i datamodellen oppdateres samtidig i `packages/shared`, `MelingCore`, `firestore.rules`,
   regeltestene og `docs/datamodel.md`.
-- Felter som styrer tilgang (`memberIds`, `familyIds`, `role`) skrives kun av Cloud Functions.
+- Tilgang: innlogget bruker er medlem hvis og bare hvis `members/{uid}` finnes. Medlemmer legges til med `pnpm add-member`, aldri fra klientene.
+- Nye tjenester får egen samling på toppnivå og egen `match`-blokk med `isMember()` i `firestore.rules`, pluss regeltester.
 - Functions importerer `@meling/shared` via tsconfig-`paths` og tsup-bundling, ikke som npm-avhengighet.
 - Ikke sjekk inn `Meling.xcodeproj`; endre `project.yml` og kjør `xcodegen generate`.
 
@@ -28,6 +29,7 @@ pnpm emulators            # Firebase Emulator Suite (UI på :4000)
 pnpm --filter @meling/web dev
 pnpm typecheck && pnpm test
 pnpm test:rules           # Firestore-regeltester mot emulatoren
+pnpm add-member --email <e-post> --name <navn> [--emulator]
 cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test
 ```

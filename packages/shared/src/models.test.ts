@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { CreateFamilyRequest, FamilyDoc } from "./models";
+import { paths } from "./collections";
+import { MemberDoc } from "./models";
 
-describe("CreateFamilyRequest", () => {
-  it("accepts a valid request", () => {
-    expect(CreateFamilyRequest.parse({ name: "Meling", displayName: "Amund" })).toEqual({
-      name: "Meling",
-      displayName: "Amund",
-    });
+describe("MemberDoc", () => {
+  it("accepts a valid member", () => {
+    const member = { displayName: "Amund", email: "amund@example.com" };
+    expect(MemberDoc.parse(member)).toEqual(member);
   });
 
-  it("rejects an empty family name", () => {
-    expect(CreateFamilyRequest.safeParse({ name: "", displayName: "Amund" }).success).toBe(false);
+  it("rejects an empty display name", () => {
+    expect(MemberDoc.safeParse({ displayName: "", email: "amund@example.com" }).success).toBe(false);
   });
 });
 
-describe("FamilyDoc", () => {
-  it("requires at least one member", () => {
-    expect(FamilyDoc.safeParse({ name: "Meling", ownerId: "u1", memberIds: [] }).success).toBe(false);
+describe("paths", () => {
+  it("builds member paths", () => {
+    expect(paths.member("u1")).toBe("members/u1");
   });
 });

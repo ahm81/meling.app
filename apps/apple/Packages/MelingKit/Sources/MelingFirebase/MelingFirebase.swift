@@ -29,10 +29,13 @@ public enum MelingFirebase {
     }
 }
 
-public struct FamilyRepository: Sendable {
+public struct MemberRepository: Sendable {
     public init() {}
 
-    public func family(id: String) async throws -> FamilyDoc {
-        try await Firestore.firestore().document(Paths.family(id)).getDocument(as: FamilyDoc.self)
+    /// Returns the member profile for the signed-in user, or nil if they are not part of the family.
+    public func currentMember() async throws -> MemberDoc? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        let snapshot = try await Firestore.firestore().document(Paths.member(uid)).getDocument()
+        return snapshot.exists ? try snapshot.data(as: MemberDoc.self) : nil
     }
 }

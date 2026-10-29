@@ -1,46 +1,45 @@
 # Datamodell (Firestore)
 
-Dette er kontrakten alle klienter følger. Ved endringer oppdateres alle tre steder i samme commit:
+meling.app er kun for Meling-familien. Det finnes ingen åpen registrering: en innlogget bruker har
+tilgang hvis og bare hvis `members/{uid}` finnes.
 
-- `packages/shared/src/` – zod-skjemaer og stier (web + functions)
-- `apps/apple/Packages/MelingKit/Sources/MelingCore/` – Swift `Codable`-modeller og stier
-- `firebase/firestore.rules` + `firebase/tests/` – tilgangsregler og tester
+Dette er kontrakten alle klienter følger. Ved endringer oppdateres alle stedene i samme commit:
+
+- `packages/shared/src/`: zod-skjemaer og stier (web, functions og admin-skript)
+- `apps/apple/Packages/MelingKit/Sources/MelingCore/`: Swift `Codable`-modeller og stier
+- `firebase/firestore.rules` + `firebase/tests/`: tilgangsregler og tester
 
 ## Samlinger
 
-### `users/{uid}`
+### `members/{uid}`
 
-| Felt          | Type       | Skrives av                       |
-| ------------- | ---------- | -------------------------------- |
-| `displayName` | string     | brukeren                         |
-| `email`       | string?    | brukeren                         |
-| `familyIds`   | string[]   | kun Cloud Functions              |
+Familiemedlemmene. Legges til med `pnpm add-member`, aldri fra klientene.
 
-### `families/{familyId}`
+| Felt          | Type   | Skrives av                         |
+| ------------- | ------ | ---------------------------------- |
+| `displayName` | string | admin-skriptet, eller medlemmet selv |
+| `email`       | string | admin-skriptet                     |
 
-| Felt        | Type      | Skrives av                        |
-| ----------- | --------- | --------------------------------- |
-| `name`      | string    | medlemmer (kun dette feltet)      |
-| `ownerId`   | string    | Cloud Functions                   |
-| `memberIds` | string[]  | Cloud Functions                   |
-| `createdAt` | timestamp | Cloud Functions                   |
+## Tjenester
 
-`memberIds` brukes av sikkerhetsreglene for å avgjøre tilgang til familien og alt under den.
-
-### `families/{familyId}/members/{uid}`
-
-| Felt          | Type                   | Skrives av                    |
-| ------------- | ---------------------- | ----------------------------- |
-| `displayName` | string                 | medlemmet selv                |
-| `role`        | `"parent" \| "child"`  | Cloud Functions               |
-| `joinedAt`    | timestamp              | Cloud Functions               |
-
-## Callable functions (region `europe-west1`)
-
-| Navn           | Request                         | Response         |
-| -------------- | ------------------------------- | ---------------- |
-| `createFamily` | `{ name, displayName }`         | `{ familyId }`   |
+Hver tjeneste (for eksempel en julekalender) får sin egen samling på toppnivå og sin egen
+`match`-blokk i `firestore.rules` som bruker `isMember()`. Alt som ikke er eksplisitt tillatt, er stengt.
 
 ## Storage
 
-`families/{familyId}/**` er lesbart og skrivbart for medlemmer av familien. Alt annet er stengt.
+Alt er lesbart og skrivbart for medlemmer, og stengt for alle andre.
+
+## Legge til et familiemedlem
+
+Personen logger inn i appen én gang, slik at kontoen finnes i Firebase Auth. Deretter:
+
+```bash
+gcloud auth application-default login   # én gang
+pnpm add-member --email ingjerd@example.com --name Ingjerd
+```
+
+Mot emulatorene (oppretter Auth-brukeren hvis den mangler):
+
+```bash
+pnpm add-member --email amund@example.com --name Amund --emulator
+```

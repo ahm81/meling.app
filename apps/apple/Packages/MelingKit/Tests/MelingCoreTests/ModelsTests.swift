@@ -2,12 +2,12 @@ import Foundation
 import MelingCore
 import Testing
 
-@Test func familyDocDecodesFromSharedShape() throws {
-    let json = #"{"name":"Meling","ownerId":"u1","memberIds":["u1"]}"#
-    let family = try JSONDecoder().decode(FamilyDoc.self, from: Data(json.utf8))
-    #expect(family == FamilyDoc(name: "Meling", ownerId: "u1", memberIds: ["u1"]))
+@Test func memberDocDecodesFromSharedShape() throws {
+    let json = #"{"displayName":"Amund","email":"amund@example.com"}"#
+    let member = try JSONDecoder().decode(MemberDoc.self, from: Data(json.utf8))
+    #expect(member == MemberDoc(displayName: "Amund", email: "amund@example.com"))
 }
 
 @Test func memberPathMatchesTypeScript() {
-    #expect(Paths.member(familyId: "f1", uid: "u1") == "families/f1/members/u1")
+    #expect(Paths.member("u1") == "members/u1")
 }
