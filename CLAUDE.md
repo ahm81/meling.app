@@ -41,11 +41,11 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
 
 - `.github/workflows/js.yml`: typecheck, tester, bygg og regeltester på PR-er (gjenbrukes av deploy).
 - `.github/workflows/apple.yml`: MelingCore-tester og bygg av iOS, macOS og tvOS på PR-er.
-- `.github/workflows/preview.yml`: web deployes til en Hosting-forhåndsvisning (`pr-<nr>`, 7 dager) på PR-er fra repoet.
+- `.github/workflows/preview.yml`: web bygges uten tilgang, og en egen jobb uten prosjektkode deployer artefaktet til en Hosting-forhåndsvisning (`pr-<nr>`, 7 dager).
 - `.github/workflows/deploy.yml`: ved push til main kjøres sjekkene, deretter `firebase deploy --force` til `meling-app`.
 - Autentisering mot Google Cloud skjer med Workload Identity (ingen nøkler i GitHub), med to kontoer:
   `github-deployer` (full deploy, kun GitHub-miljøet `production`, som bare `main` kan bruke) og
-  `github-preview` (kun Hosting, kun `pull_request`-jobber).
+  `github-preview` (kun Hosting, kun GitHub-miljøet `preview`).
   Engangsoppsett: `scripts/setup-github-deploy.sh`. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
 - Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.

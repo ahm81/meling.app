@@ -5,7 +5,8 @@
 # Two service accounts with separate trust:
 #   github-deployer  full deploy (deploy.yml). Only jobs in the GitHub environment
 #                    "production", which only main may deploy to.
-#   github-preview   Hosting only (preview.yml). Only pull_request jobs.
+#   github-preview   Hosting only (preview.yml). Only jobs in the GitHub environment
+#                    "preview", used by the deploy job that runs no project code.
 #
 # Run as a project owner: ./scripts/setup-github-deploy.sh
 # Safe to re-run; existing resources are left as they are.
@@ -77,10 +78,10 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --project "$PROJ
   --role=roles/iam.workloadIdentityUser --quiet >/dev/null \
   --member="$POOL_PRINCIPALS/attribute.environment/production"
 
-echo "Trust: pull_request jobs -> $PREVIEW_SA"
+echo "Trust: preview environment -> $PREVIEW_SA"
 gcloud iam service-accounts add-iam-policy-binding "$PREVIEW_SA" --project "$PROJECT" \
   --role=roles/iam.workloadIdentityUser --quiet >/dev/null \
-  --member="$POOL_PRINCIPALS/attribute.event_name/pull_request"
+  --member="$POOL_PRINCIPALS/attribute.environment/preview"
 
 # Only main may deploy to the production environment, so a pushed branch can't claim it.
 echo "GitHub environment production (main only)"
@@ -91,6 +92,9 @@ gh api "repos/$REPO/environments/production/deployment-branch-policies" --jq '.b
   grep -qx main ||
   gh api -X POST "repos/$REPO/environments/production/deployment-branch-policies" \
     -f name=main -f type=branch >/dev/null
+
+echo "GitHub environment preview"
+gh api -X PUT "repos/$REPO/environments/preview" >/dev/null
 
 # Not secrets: the workflows read these as repository variables.
 echo "GitHub repository variables"
