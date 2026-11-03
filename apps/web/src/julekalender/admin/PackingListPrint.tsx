@@ -18,7 +18,8 @@ export function PackingListPrint() {
     calendar && currentVersion && currentVersion.number === calendar.currentVersion ? currentVersion.plan : null;
   const bags = useMemo(() => (plan ? plan.days.map((d) => packingList(steps, d.stepIds)) : []), [plan, steps]);
 
-  if (!calendar) return null;
+  // Show why there is nothing to show (for example a denied read) instead of a blank page.
+  if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   return (
     <section className="packing">

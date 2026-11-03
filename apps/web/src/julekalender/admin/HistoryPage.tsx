@@ -11,7 +11,7 @@ import { usePages } from "./usePages";
 
 /** «3. nov. kl. 21.14» */
 export function formatTime(d: Date): string {
-  const parts = new Intl.DateTimeFormat("nb-NO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+  const parts = new Intl.DateTimeFormat("nb-NO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     .formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   const month = get("month").replace(/\.$/, "");
@@ -26,26 +26,30 @@ export function authorLabel(author: VersionAuthor, names: Map<string, string>): 
 
 function useVersions(calId: string) {
   const [versions, setVersions] = useState<VersionDoc[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setVersions([]);
+    setLoaded(false);
     setError(null);
     return onSnapshot(
       query(collection(db, paths.calendar(calId), "versions"), orderBy("number", "desc")),
-      (snap) =>
+      (snap) => {
         setVersions(
           snap.docs.flatMap((d) => {
             const parsed = VersionDoc.safeParse(fromFirestore(d.data()));
             return parsed.success ? [parsed.data] : [];
           }),
-        ),
+        );
+        setLoaded(true);
+      },
       (e) => {
         console.error("versjonene", e);
         setError("Kunne ikke hente historikken.");
       },
     );
   }, [calId]);
-  return { versions, error };
+  return { versions, loaded, error };
 }
 
 function useMemberNames(): Map<string, string> {
@@ -74,7 +78,7 @@ function useMemberNames(): Map<string, string> {
 export function HistoryPage() {
   const { calId = "" } = useParams();
   const { calendar, manuals, error } = useCalendar(calId);
-  const { versions, error: versionsError } = useVersions(calId);
+  const { versions, loaded: versionsLoaded, error: versionsError } = useVersions(calId);
   const { pages } = usePages(calId);
   const names = useMemberNames();
   const [open, setOpen] = useState<number | null>(null);
@@ -112,7 +116,8 @@ export function HistoryPage() {
     }
   }
 
-  if (!calendar) return null;
+  // Show why there is nothing to show (for example a denied read) instead of a blank page.
+  if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   return (
     <section className="history">
@@ -129,7 +134,7 @@ export function HistoryPage() {
           <span>{notice.message}</span>
         </div>
       )}
-      {versions.length === 0 && !versionsError && <p>Ingen versjoner ennå.</p>}
+      {versionsLoaded && versions.length === 0 && !versionsError && <p>Ingen versjoner ennå.</p>}
       <ol className="history-list">
         {versions.map((v, i) => {
           const isCurrent = v.number === current;

@@ -81,7 +81,8 @@ export function PlanPage() {
       .finally(() => setRedrafting(false));
   }
 
-  if (!calendar) return null;
+  // Show why there is nothing to show (for example a denied read) instead of a blank page.
+  if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   const draftRunning = calendar.draft === "running";
   const selected = rows[day - 1];

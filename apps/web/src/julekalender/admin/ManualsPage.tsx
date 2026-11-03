@@ -338,7 +338,8 @@ function CalendarManuals({ calId }: { calId: string }) {
     }
   }
 
-  if (!calendar) return null;
+  // Show why there is nothing to show (for example a denied read) instead of a blank page.
+  if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   const hasPlan = calendar.currentVersion !== null;
   const draftStale = calendar.draft === "running" && isStale(calendar.draftUpdatedAt, now);

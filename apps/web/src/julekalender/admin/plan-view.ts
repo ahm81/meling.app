@@ -305,7 +305,11 @@ export function diffPlans(prev: Plan, next: Plan, index: StepIndex): PlanDiff {
   next.days.forEach((d, i) => {
     const before = prev.days[i]?.stepIds ?? [];
     const same = before.length === d.stepIds.length && before.every((id, k) => id === d.stepIds[k]);
-    if (!same) days.push(`Dag ${i + 1}: ${stepsLabel(before, index)} → ${stepsLabel(d.stepIds, index)}`);
+    if (same) return;
+    const from = stepsLabel(before, index);
+    const to = stepsLabel(d.stepIds, index);
+    // Same label but different steps (e.g. «3 trinn» → «3 trinn» after a new draft): say so.
+    days.push(`Dag ${i + 1}: ${from} → ${to}${from === to ? " (trinn endret)" : ""}`);
   });
   const prevIds = new Set(prev.hidden.map((h) => h.id));
   const nextIds = new Set(next.hidden.map((h) => h.id));

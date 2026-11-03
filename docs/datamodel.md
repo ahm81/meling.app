@@ -89,7 +89,7 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 | ---------------- | -------------------------------------------------------------------------------------------- |
 | `editPlan`       | `{ calendarId, baseVersion, ops, summary }`: flytter trinn eller skjuler/viser områder og lager en ny versjon |
 | `restoreVersion` | `{ calendarId, baseVersion, fromVersion }`: lager en ny versjon med planen til `fromVersion` og `restoredFrom` satt |
-| `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter) |
+| `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter). `baseVersion` er `null` når kalenderen ikke har noen versjon ennå (førsteutkastet feilet) |
 | `renderCutouts`  | `{ calendarId, version }`: lager utklippene til pakkelisten i Storage                        |
 | `retryManual`    | `{ calendarId, manualId }`: fortsetter rendering og analyse for en manual. Sider som allerede er analysert, og bildene deres, beholdes; bare de manglende sidene analyseres. Utklippene til manualen slettes |
 | `deleteManual`   | `{ calendarId, manualId }`: sletter manualen med sider, sidebilder, utklipp og PDF. Ikke mens den leses (med mindre den har stått fast i mer enn 15 minutter). Versjonene endres ikke; venter kalenderen på førsteutkastet og alle gjenværende manualer er lest, lages det |
