@@ -41,6 +41,11 @@ cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test
 ```
 
+Julekalenderens Gemini-kall bruker modellen `GEMINI_MODEL` (standard `gemini-2.5-pro`) og Vertex-lokasjonen
+`GEMINI_LOCATION` (standard `global`). Begge leses fra miljøet ved hvert kall og er ikke hemmeligheter: sett dem i
+skallet for `try-analysis`, eller i `firebase/functions/.env.meling-app` (kan committes) for deploy.
+`MELING_FAKE_AI=1` i `firebase/functions/.env.local` gir falsk AI i emulatoren.
+
 Apple-appene konfigurerer Firebase bare hvis `GoogleService-Info.plist` finnes i app-bundlen.
 Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
 

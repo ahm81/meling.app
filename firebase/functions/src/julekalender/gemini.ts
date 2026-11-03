@@ -4,6 +4,15 @@ import { z } from "zod";
 import { RawConstraints, RawPageAnalysis } from "./analysis";
 
 export const GEMINI_MODEL = "gemini-2.5-pro";
+export const GEMINI_LOCATION = "global";
+
+/** Model and Vertex location, read from the environment on every call (functions .env or the shell). */
+export function geminiConfig(): { model: string; location: string } {
+  return {
+    model: process.env.GEMINI_MODEL || GEMINI_MODEL,
+    location: process.env.GEMINI_LOCATION || GEMINI_LOCATION,
+  };
+}
 
 export const PAGE_PROMPT = `Du ser én side fra en LEGO-bruksanvisning. Svar med JSON etter skjemaet.
 - kind: "cover" for forsiden, "instructions" for sider med byggetrinn, "inventory" for brikkeoversikt, ellers "other".
@@ -43,20 +52,80 @@ export function parseGeminiResponse(res: GenerateResponse, context: string): unk
   }
 }
 
-export function vertexAi(client: GenerateClient = new GoogleGenAI({ vertexai: true, project: "meling-app", location: "global" }) as unknown as GenerateClient): Ai {
-  // Vertex AI via Application Default Credentials; no key.
-  const generate = async (contents: unknown, schema: z.ZodType, context: string) => {
+export interface RetryOptions {
+  /** Total attempts per call (default 3). */
+  attempts?: number;
+  /** Base delay before attempt 2, 3, … (default 2 s, 6 s); each is jittered ±25 %. */
+  delaysMs?: number[];
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+}
+
+/** 408, 429 and 5xx are worth another try; so are errors without an HTTP status (network failures). */
+export function isRetryable(e: unknown): boolean {
+  const status = (e as { status?: unknown } | null)?.status;
+  if (typeof status !== "number") return true;
+  return status === 408 || status === 429 || status >= 500;
+}
+
+class GeminiCallError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    cause: unknown,
+  ) {
+    super(message, { cause });
+  }
+}
+
+const clients = new Map<string, GenerateClient>();
+function clientFor(location: string): GenerateClient {
+  let c = clients.get(location);
+  if (!c) {
+    // Vertex AI via Application Default Credentials; no key.
+    c = new GoogleGenAI({ vertexai: true, project: "meling-app", location }) as unknown as GenerateClient;
+    clients.set(location, c);
+  }
+  return c;
+}
+
+export function vertexAi(client?: GenerateClient, retry: RetryOptions = {}): Ai {
+  const {
+    attempts = 3,
+    delaysMs = [2000, 6000],
+    sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+    random = Math.random,
+  } = retry;
+
+  const once = async (contents: unknown, schema: z.ZodType, context: string) => {
+    const { model, location } = geminiConfig();
     let res: GenerateResponse;
     try {
-      res = await client.models.generateContent({
-        model: GEMINI_MODEL,
+      res = await (client ?? clientFor(location)).models.generateContent({
+        model,
         contents,
         config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(schema) },
       } as never);
     } catch (e) {
-      throw new Error(`Gemini ${context}: kallet feilet`, { cause: e });
+      throw new GeminiCallError(`Gemini ${context}: kallet feilet`, isRetryable(e), e);
     }
+    // Empty, truncated or malformed answers are usually transient: try again.
     return parseGeminiResponse(res, context);
+  };
+
+  const generate = async (contents: unknown, schema: z.ZodType, context: string) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await once(contents, schema, context);
+      } catch (e) {
+        const retryable = !(e instanceof GeminiCallError) || e.retryable;
+        if (!retryable || attempt >= attempts) {
+          throw e instanceof GeminiCallError ? new Error(e.message, { cause: e.cause }) : e;
+        }
+        const base = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)] ?? 0;
+        await sleep(Math.round(base * (0.75 + random() * 0.5)));
+      }
+    }
   };
   return {
     analyzePage: (png, page) =>

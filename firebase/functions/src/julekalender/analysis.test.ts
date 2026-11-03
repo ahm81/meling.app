@@ -63,6 +63,43 @@ describe("toPageAnalysis", () => {
     expect(toPageAnalysis(raw([], { kind: "cover", set_number: "75192" })).setNumber).toBe("75192");
   });
 
+  it("drops invalid parts and keeps the step", () => {
+    const parts = [
+      { qty: 2, name: "Kloss 2x4", color: "Rød" },
+      { qty: 0, name: "Null", color: "Blå" },
+      { qty: 1, name: "  ", color: "Blå" },
+      { qty: 1.5, name: "Halv", color: "Blå" },
+      { qty: "3", name: "Tekst", color: "Blå" },
+      { name: "Uten antall", color: "Blå" },
+      null,
+    ];
+    const { analysis } = toPageAnalysis(
+      raw([step([0, 0, 500, 500], { parts }), step([500, 0, 1000, 500], { printed_number: 2, parts: [{ qty: -1, name: "x", color: "y" }] })], {
+        inventory: [{ qty: 4, name: "Plate", color: "Grå" }, { qty: 0, name: "Plate", color: "Grå" }],
+      }),
+    );
+    expect(analysis.steps[0]!.parts).toEqual([{ qty: 2, name: "Kloss 2x4", color: "Rød" }]);
+    expect(analysis.steps[1]!.parts).toEqual([]);
+    expect(analysis.inventory).toEqual([{ qty: 4, name: "Plate", color: "Grå" }]);
+  });
+
+  it("drops steps and spoilers with invalid boxes or numbers instead of throwing", () => {
+    const { analysis } = toPageAnalysis(
+      raw(
+        [
+          step([1, 2, 3] as never),
+          step([1, 2, 3, "x"] as never, { printed_number: 2 }),
+          step(null as never, { printed_number: 3 }),
+          step([0, 0, 500, 500], { printed_number: 0 }),
+          step([0, 0, 500, 500], { printed_number: 5 }),
+        ],
+        { spoilers: [{ box_2d: "nope", label: "x" }, { box_2d: [0, 0, 100, 100], label: "ok" }, { box_2d: [0, 0, 100, 100] }] },
+      ),
+    );
+    expect(analysis.steps.map((s) => s.printedNumber)).toEqual([5]);
+    expect(analysis.spoilers.map((s) => s.label)).toEqual(["ok"]);
+  });
+
   it("rejects malformed AI output", () => {
     expect(() => toPageAnalysis(raw([], { kind: "banana" }))).toThrow();
   });
@@ -102,10 +139,9 @@ describe("fakeAi", () => {
 });
 
 describe("RawPageAnalysis", () => {
-  it("rejects missing steps and malformed box_2d", () => {
+  it("rejects missing steps", () => {
     expect(() => RawPageAnalysis.parse({ kind: "cover" })).toThrow();
-    expect(() => toPageAnalysis(raw([step([1, 2, 3] as never)]))).toThrow();
-    expect(() => toPageAnalysis(raw([step([1, 2, 3, "x"] as never)]))).toThrow();
+    expect(() => toPageAnalysis({ kind: "cover" })).toThrow();
   });
   it("swaps inverted boxes", () => {
     const b = toPageAnalysis(raw([step([600, 700, 100, 200])])).analysis.steps[0]!.bbox;
@@ -122,7 +158,7 @@ describe("RawPageAnalysis", () => {
 describe("Gemini response handling", () => {
   const client = (res: object | Error) =>
     ({ models: { generateContent: async () => { if (res instanceof Error) throw res; return res; } } }) as never;
-  const run = (res: object | Error) => vertexAi(client(res)).analyzePage(Buffer.alloc(0), 7);
+  const run = (res: object | Error) => vertexAi(client(res), { sleep: async () => {} }).analyzePage(Buffer.alloc(0), 7);
   it("parses a good response", async () => {
     expect(await run({ text: '{"a":1}', candidates: [{ finishReason: "STOP" }] })).toEqual({ a: 1 });
   });
