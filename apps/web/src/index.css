@@ -24,3 +24,220 @@ form {
   color: #78350f;
   font-size: 0.875rem;
 }
+
+/* Julekalender admin */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1b1f1d;
+  --muted: #5b635f;
+  --line: #cfcbc0;
+  --green: #1f5c45;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161a18;
+    --surface: #1f2522;
+    --text: #ecebe6;
+    --muted: #a3aba7;
+    --line: #3a423e;
+    --green: #6fc29d;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+}
+
+a {
+  color: var(--green);
+}
+
+button,
+select,
+.btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+button.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+.admin {
+  max-width: 70rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin h1,
+.card h2 {
+  font-family: Fraunces, Georgia, serif;
+  margin: 0;
+}
+
+.admin-head {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-head.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crumbs {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-tabs a {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.admin-tabs a.active {
+  border-color: var(--green);
+  font-weight: 600;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.card dl {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.card dt {
+  color: var(--muted);
+}
+
+.card dd {
+  margin: 0;
+  text-align: right;
+}
+
+.card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-links a {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.card.create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pill {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e8e6df;
+  color: #3b403d;
+}
+
+.badge-run {
+  background: #dbe8f7;
+  color: #1b3a5e;
+}
+
+.badge-ok {
+  background: #dcefe5;
+  color: #174a36;
+}
+
+.badge-err {
+  background: #fcdcd6;
+  color: #7a1f10;
+}
+
+.badge-wait {
+  background: #fcebd3;
+  color: #7a4300;
+}

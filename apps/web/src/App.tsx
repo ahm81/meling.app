@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { MemberDoc, paths } from "@meling/shared";
 import { auth, db, useEmulators } from "./firebase";
+import { AdminShell, AdultOnly, Placeholder } from "./julekalender/admin/AdminShell";
+import { Overview } from "./julekalender/admin/Overview";
 
 type Access =
   | { state: "loading" }
@@ -42,33 +45,67 @@ export function App() {
     }
   }
 
+  if (access.state !== "member") {
+    return (
+      <main>
+        <h1>meling.app</h1>
+        {useEmulators && <p className="badge">Kjører mot lokale emulatorer</p>}
+
+        {access.state === "loading" && <p>Laster…</p>}
+
+        {access.state === "signedOut" && (
+          <>
+            <button onClick={signIn}>Logg inn med Google</button>
+            {signInError && <p role="alert">{signInError}</p>}
+          </>
+        )}
+
+        {access.state === "denied" && (
+          <>
+            <p>{access.user.email} har ikke tilgang. Denne appen er kun for Meling-familien.</p>
+            <button onClick={() => signOut(auth)}>Logg ut</button>
+          </>
+        )}
+      </main>
+    );
+  }
+
+  const { user, member } = access;
+  const adult = member.role === "adult";
+
   return (
-    <main>
-      <h1>meling.app</h1>
-      {useEmulators && <p className="badge">Kjører mot lokale emulatorer</p>}
-
-      {access.state === "loading" && <p>Laster…</p>}
-
-      {access.state === "signedOut" && (
-        <>
-          <button onClick={signIn}>Logg inn med Google</button>
-          {signInError && <p role="alert">{signInError}</p>}
-        </>
-      )}
-
-      {access.state === "denied" && (
-        <>
-          <p>{access.user.email} har ikke tilgang. Denne appen er kun for Meling-familien.</p>
-          <button onClick={() => signOut(auth)}>Logg ut</button>
-        </>
-      )}
-
-      {access.state === "member" && (
-        <>
-          <p>Hei, {access.member.displayName}!</p>
-          <button onClick={() => signOut(auth)}>Logg ut</button>
-        </>
-      )}
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <main>
+              <h1>meling.app</h1>
+              {useEmulators && <p className="badge">Kjører mot lokale emulatorer</p>}
+              <p>Hei, {member.displayName}!</p>
+              {adult && (
+                <nav>
+                  <Link className="btn" to="/julekalender/admin">
+                    Julekalender
+                  </Link>
+                </nav>
+              )}
+              <button onClick={() => signOut(auth)}>Logg ut</button>
+            </main>
+          }
+        />
+        <Route path="/julekalender/admin" element={<AdultOnly adult={adult} />}>
+          <Route index element={<Overview uid={user.uid} />} />
+          <Route path=":calId" element={<AdminShell />}>
+            <Route index element={<Navigate to="manualer" replace />} />
+            <Route path="manualer" element={<Placeholder title="Manualer" />} />
+            <Route path="fordeling" element={<Placeholder title="Fordeling" />} />
+            <Route path="historikk" element={<Placeholder title="Historikk" />} />
+            <Route path="pakkeliste" element={<Placeholder title="Pakkeliste" />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
