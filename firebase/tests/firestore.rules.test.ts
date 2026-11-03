@@ -242,9 +242,27 @@ describe("julekalender", () => {
     await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded", "m2")));
   });
 
-  it("denies updating and deleting manuals from clients", async () => {
+  it("adults may change a manual's order", async () => {
     const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: 2 }));
+  });
+
+  it("denies a bad order and changing other manual fields", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: 0 }));
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: 1.5 }));
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: "2" }));
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: 2, status: "done" }));
     await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { status: "done" }));
+  });
+
+  it("children cannot reorder manuals", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { order: 2 }));
+  });
+
+  it("denies deleting manuals from clients", async () => {
+    const db = env.authenticatedContext("amund").firestore();
     await assertFails(deleteDoc(doc(db, paths.manual("2026-ida", "m1"))));
   });
 });

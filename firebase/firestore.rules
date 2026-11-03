@@ -58,7 +58,12 @@ service cloud.firestore {
           && request.resource.data.pagesAnalyzed == 0
           && request.resource.data.setNumber == null
           && request.resource.data.error == null;
-        allow update, delete: if false;
+        // Adults choose the booklet order; everything else is written by functions.
+        // Deleting a manual goes through the deleteManual function (it also removes pages and files).
+        allow update: if isAdult()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['order'])
+          && request.resource.data.order is int && request.resource.data.order >= 1;
+        allow delete: if false;
       }
 
       match /pages/{pageId} {
