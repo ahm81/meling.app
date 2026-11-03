@@ -15,17 +15,27 @@ type Access =
   | { state: "loading" }
   | { state: "signedOut" }
   | { state: "denied"; user: User }
+  | { state: "invalidMember"; user: User }
   | { state: "member"; user: User; member: MemberDoc };
 
 async function resolveAccess(user: User | null): Promise<Access> {
   if (!user) return { state: "signedOut" };
+  let data: unknown;
   try {
     const snapshot = await getDoc(doc(db, paths.member(user.uid)));
-    return { state: "member", user, member: MemberDoc.parse(snapshot.data()) };
+    if (!snapshot.exists()) return { state: "denied", user };
+    data = snapshot.data();
   } catch {
     // Rules deny reads for anyone who isn't in members/, so a failed read means no access.
     return { state: "denied", user };
   }
+  const member = MemberDoc.safeParse(data);
+  if (!member.success) {
+    // A member, but the document is incomplete (for example without role): fixed by add-member, not by us.
+    console.error("Ugyldig medlemsdokument", member.error);
+    return { state: "invalidMember", user };
+  }
+  return { state: "member", user, member: member.data };
 }
 
 export function App() {
@@ -67,6 +77,13 @@ export function App() {
         {access.state === "denied" && (
           <>
             <p>{access.user.email} har ikke tilgang. Denne appen er kun for Meling-familien.</p>
+            <button onClick={() => signOut(auth)}>Logg ut</button>
+          </>
+        )}
+
+        {access.state === "invalidMember" && (
+          <>
+            <p role="alert">Medlemskapet ditt mangler rolle eller er ugyldig. Be en voksen kjøre add-member på nytt.</p>
             <button onClick={() => signOut(auth)}>Logg ut</button>
           </>
         )}
