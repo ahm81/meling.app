@@ -87,10 +87,10 @@ describe("julekalender", () => {
     draftError: null,
     createdBy,
   });
-  const newManual = (status: string) => ({
+  const newManual = (status: string, manualId = "m1") => ({
     order: 1,
     fileName: "set.pdf",
-    storagePath: "julekalender/2026-ida/manuals/m1.pdf",
+    storagePath: `julekalender/2026-ida/manuals/${manualId}.pdf`,
     status,
     pageCount: null,
     pagesAnalyzed: 0,
@@ -204,13 +204,29 @@ describe("julekalender", () => {
 
   it("adults create manuals only as uploaded", async () => {
     const db = env.authenticatedContext("amund").firestore();
-    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("done")));
-    await assertSucceeds(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded")));
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("done", "m2")));
+    await assertSucceeds(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded", "m2")));
+  });
+
+  it("denies manuals with a wrong storagePath", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(
+      setDoc(doc(db, paths.manual("2026-ida", "m2")), {
+        ...newManual("uploaded", "m2"),
+        storagePath: "julekalender/2026-julian/manuals/m2.pdf",
+      }),
+    );
+  });
+
+  it("denies manuals with an extra key or preset processing fields", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), { ...newManual("uploaded", "m2"), extra: 1 }));
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), { ...newManual("uploaded", "m2"), pagesAnalyzed: 3 }));
   });
 
   it("children cannot create manuals", async () => {
     const db = env.authenticatedContext("ida").firestore();
-    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded")));
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded", "m2")));
   });
 
   it("denies updating and deleting manuals from clients", async () => {

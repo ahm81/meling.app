@@ -42,7 +42,19 @@ service cloud.firestore {
 
       match /manuals/{manualId} {
         allow read: if isAdult();
-        allow create: if isAdult() && request.resource.data.status == 'uploaded';
+        allow create: if isAdult()
+          && request.resource.data.keys().hasOnly(
+            ['order', 'fileName', 'storagePath', 'status', 'pageCount', 'pagesAnalyzed', 'setNumber', 'error'])
+          && request.resource.data.keys().hasAll(
+            ['order', 'fileName', 'storagePath', 'status', 'pageCount', 'pagesAnalyzed', 'setNumber', 'error'])
+          && request.resource.data.order is int && request.resource.data.order >= 1
+          && request.resource.data.fileName is string
+          && request.resource.data.storagePath == 'julekalender/' + calId + '/manuals/' + manualId + '.pdf'
+          && request.resource.data.status == 'uploaded'
+          && request.resource.data.pageCount == null
+          && request.resource.data.pagesAnalyzed == 0
+          && request.resource.data.setNumber == null
+          && request.resource.data.error == null;
         allow update, delete: if false;
       }
 

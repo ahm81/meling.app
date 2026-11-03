@@ -11,7 +11,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "emulators": "firebase emulators:start --import=.firebase-data --export-on-exit",
-    "test:rules": "firebase emulators:exec --only firestore,storage \"pnpm --filter @meling/firebase-tests test:rules\"",
+    "test:rules": "firebase emulators:exec --project demo-meling --only firestore,storage \"pnpm --filter @meling/firebase-tests test:rules\"",
     "deploy": "turbo run build && firebase deploy",
     "add-member": "pnpm --filter @meling/admin add-member"
   },

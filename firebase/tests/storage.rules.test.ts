@@ -16,10 +16,10 @@ const read = (name: string) => readFileSync(fileURLToPath(new URL(`../${name}`, 
 const bytes = () => new Uint8Array([1, 2, 3]);
 
 beforeAll(async () => {
-  // Storage rules read members through the Firestore emulator of the project the emulators run
-  // as (GCLOUD_PROJECT, set by emulators:exec), so the test must use that same project id.
+  // Storage rules read members through the Firestore emulator of the emulators' project, so this
+  // must match `--project` in the root test:rules script.
   env = await initializeTestEnvironment({
-    projectId: process.env.GCLOUD_PROJECT ?? "demo-meling",
+    projectId: "demo-meling",
     firestore: { rules: read("firestore.rules") },
     storage: { rules: read("storage.rules") },
   });
