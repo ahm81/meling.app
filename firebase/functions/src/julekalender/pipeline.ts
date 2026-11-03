@@ -10,16 +10,15 @@ import {
   paths,
   storagePaths,
 } from "@meling/shared";
-import { FieldValue, type Firestore, getFirestore } from "firebase-admin/firestore";
+import { type DocumentReference, FieldValue, type Firestore, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { ZodError } from "zod";
 import { toConstraints, toPageAnalysis } from "./analysis";
-import { type Constraint, TooFewBrickStepsError, TooFewStepsError, distribute } from "./distribute";
+import { type Constraint, TooFewBrickStepsError, TooFewStepsError, UNSATISFIABLE, distribute } from "./distribute";
 import { type Ai, aiFromEnv } from "./gemini";
 import { PdfReadError, renderPdf } from "./pdf";
-import { writeVersion } from "./versions";
+import { StaleVersionError, writeVersion } from "./versions";
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 export type PipelineDeps = { db: Firestore; bucket: Bucket; ai: Ai };
@@ -108,11 +107,31 @@ export async function processManual({ db, bucket, ai }: PipelineDeps, calId: str
     });
   } catch (e) {
     logger.error("Manual pipeline failed", { calId, manualId, stage, error: e });
-    await manualRef.update({ status: "error", error: manualErrorMessage(e, stage) });
+    await safeUpdate(manualRef, { status: "error", error: manualErrorMessage(e, stage) }, { calId, manualId });
     return;
   }
 
-  await draftIfAllManualsDone(db, ai, calId);
+  try {
+    await draftIfAllManualsDone(db, ai, calId);
+  } catch (e) {
+    logger.error("Could not start the first draft", { calId, manualId, error: e });
+  }
+}
+
+/** Records a failure on a document; a failing write is logged, never rethrown, so the trigger is not retried. */
+async function safeUpdate(ref: DocumentReference, data: Record<string, unknown>, context: Record<string, string>): Promise<void> {
+  try {
+    await ref.update(data);
+  } catch (e) {
+    logger.error("Could not record failure", { ...context, path: ref.path, data, error: e });
+  }
+}
+
+/** Only domain errors reach the adults as-is; anything else gets a generic message (the full error is logged). */
+function draftErrorMessage(e: unknown): string {
+  if (e instanceof TooFewStepsError || e instanceof TooFewBrickStepsError || e instanceof StaleVersionError) return e.message;
+  if (e instanceof Error && (e.message.startsWith("Gemini ") || e.message === UNSATISFIABLE)) return e.message;
+  return "Førsteutkastet kunne ikke lages på grunn av en intern feil.";
 }
 
 class UserFacingError extends Error {
@@ -147,13 +166,12 @@ const WHOLE_PAGE_LABELS: Partial<Record<PageAnalysis["kind"], string>> = {
 /** What the child should not see: every spoiler, plus whole pages that are not building instructions. */
 export function aiHidden(pages: { manualId: string; page: number; analysis: PageAnalysis }[]): Hidden[] {
   return pages.flatMap(({ manualId, page, analysis }) => {
-    const out: Hidden[] = [];
     const pageLabel = WHOLE_PAGE_LABELS[analysis.kind];
-    if (pageLabel) out.push({ id: `ai:${manualId}:${page}:page`, manualId, page, bbox: null, label: pageLabel, source: "ai" });
-    analysis.spoilers.forEach((s, i) =>
-      out.push({ id: `ai:${manualId}:${page}:spoiler:${i}`, manualId, page, bbox: s.bbox, label: s.label, source: "ai" }),
+    // A page hidden whole already covers its spoilers.
+    if (pageLabel) return [{ id: `ai:${manualId}:${page}:page`, manualId, page, bbox: null, label: pageLabel, source: "ai" }];
+    return analysis.spoilers.map(
+      (s, i): Hidden => ({ id: `ai:${manualId}:${page}:spoiler:${i}`, manualId, page, bbox: s.bbox, label: s.label, source: "ai" }),
     );
-    return out;
   });
 }
 
@@ -217,9 +235,7 @@ export async function makeFirstDraft(db: Firestore, ai: Ai, calId: string): Prom
     await calRef.update({ draft: "done", draftError: null });
   } catch (e) {
     logger.error("First draft failed", { calId, error: e });
-    const message =
-      e instanceof Error && !(e instanceof ZodError) ? e.message : "Førsteutkastet kunne ikke lages på grunn av en intern feil.";
-    await calRef.update({ draft: "error", draftError: message });
+    await safeUpdate(calRef, { draft: "error", draftError: draftErrorMessage(e) }, { calId });
   }
 }
 

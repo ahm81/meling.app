@@ -21,7 +21,7 @@ export class TooFewBrickStepsError extends Error {
  */
 export type Constraint = { kind: "stepOnDay"; stepId: string; day: number } | { kind: "stepLast"; stepId: string };
 
-const UNSATISFIABLE = "Ønskene kan ikke oppfylles samtidig.";
+export const UNSATISFIABLE = "Ønskene kan ikke oppfylles samtidig.";
 
 /**
  * Splits the ordered steps into DOOR_COUNT contiguous days.

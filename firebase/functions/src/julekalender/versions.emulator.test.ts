@@ -39,7 +39,7 @@ async function seedCalendar(overrides: Partial<CalendarDoc> = {}): Promise<strin
 }
 
 /** A finished manual whose pages are page 1 (cover) and `stepPages` instruction pages with two steps each. */
-async function seedAnalyzedManual(calId: string, stepPages: number): Promise<void> {
+async function seedAnalyzedManual(calId: string, stepPages: number, ai = fakeAi({})): Promise<void> {
   const manualId = "m1";
   const pageCount = stepPages + 1;
   const manual: ManualDoc = {
@@ -53,7 +53,6 @@ async function seedAnalyzedManual(calId: string, stepPages: number): Promise<voi
     error: null,
   };
   await db.doc(paths.manual(calId, manualId)).set(manual);
-  const ai = fakeAi({});
   for (let page = 1; page <= pageCount; page++) {
     const { analysis } = toPageAnalysis(await ai.analyzePage(Buffer.alloc(0), page));
     const doc: PageDoc = { manualId, page, imagePath: storagePaths.pageImage(calId, manualId, page), width: 10, height: 10, analysis };
@@ -114,6 +113,26 @@ describe("makeFirstDraft", () => {
     expect(cal.draftError).toContain("minst 24");
     expect(await versions(calId)).toHaveLength(0);
   });
+
+  it("falls back to balancing on steps when too few steps have bricks", async () => {
+    const calId = await seedCalendar({ wishes: { balance: "bricks", text: "" } });
+    const halfWithoutBricks = {
+      kind: "instructions",
+      steps: [
+        { printed_number: 1, box_2d: [0, 0, 1000, 500], parts: [] },
+        { printed_number: 2, box_2d: [0, 500, 1000, 1000], parts: [{ qty: 1, name: "Brikke", color: "Rød" }] },
+      ],
+      spoilers: [],
+      inventory: [],
+      set_number: null,
+    };
+    const pages = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 2, halfWithoutBricks]));
+    await seedAnalyzedManual(calId, 12, fakeAi(pages)); // 24 steps, only 12 with bricks
+    await makeFirstDraft(db, fakeAi({}), calId);
+    expect(await calendar(calId)).toMatchObject({ draft: "done", draftError: null, currentVersion: 1 });
+    const plan = (await versions(calId))[0]!.data().plan as Plan;
+    expect(plan.days.every((d) => d.stepIds.length === 1)).toBe(true);
+  });
 });
 
 describe("processManual", () => {
@@ -172,5 +191,20 @@ describe("processManual", () => {
     const manual = (await db.doc(paths.manual(calId, "m1")).get()).data() as ManualDoc;
     expect(manual.status).toBe("error");
     expect(manual.error).toMatch(/^Gemini side \d: tomt svar$/);
+    expect(await calendar(calId)).toMatchObject({ draft: "waiting", currentVersion: null });
+  });
+
+  it("processes a manual only once when the trigger is delivered twice", async () => {
+    const calId = await seedCalendar();
+    await upload(calId, "m1", minimalPdf(13));
+    const base = fakeAi({});
+    let calls = 0;
+    const ai = { ...base, analyzePage: (png: Buffer, page: number) => (calls++, base.analyzePage(png, page)) };
+    await Promise.all([processManual({ db, bucket, ai }, calId, "m1"), processManual({ db, bucket, ai }, calId, "m1")]);
+    await processManual({ db, bucket, ai }, calId, "m1");
+    expect(calls).toBe(13);
+    const manual = (await db.doc(paths.manual(calId, "m1")).get()).data() as ManualDoc;
+    expect(manual).toMatchObject({ status: "done", pageCount: 13, pagesAnalyzed: 13 });
+    expect(await versions(calId)).toHaveLength(1);
   });
 });
