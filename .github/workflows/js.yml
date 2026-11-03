@@ -35,3 +35,4 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm test:rules
+      - run: pnpm test:functions

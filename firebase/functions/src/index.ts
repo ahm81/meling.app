@@ -1,4 +1,3 @@
 import "./options";
 
-// No functions yet. Export them here as services need server-side logic.
-export {};
+export { onManualCreated } from "./julekalender/pipeline";

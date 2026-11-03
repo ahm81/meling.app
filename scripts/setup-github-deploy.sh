@@ -35,6 +35,12 @@ grant() {
     --role="$role" --condition=None --quiet >/dev/null
 }
 
+# The julekalender functions call Gemini through Vertex AI as the default compute service account
+# (Application Default Credentials, no key).
+echo "Vertex AI for the functions runtime"
+gcloud services enable aiplatform.googleapis.com --project "$PROJECT"
+grant "$PROJECT_NUMBER-compute@developer.gserviceaccount.com" roles/aiplatform.user
+
 echo "Service account $DEPLOY_SA"
 ensure_sa github-deployer "GitHub Actions deploy ($REPO, production)"
 # Hosting, rules and indexes (firebase.admin), Cloud Functions 2nd gen (cloudfunctions.admin,
