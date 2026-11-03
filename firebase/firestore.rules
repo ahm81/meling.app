@@ -25,6 +25,7 @@ service cloud.firestore {
     }
 
     // Julekalender: only adults. Versions and pages are written by functions (admin SDK) only.
+    // draftUpdatedAt (calendar) and updatedAt (manual) are set by functions only, so the create shapes omit them.
     match /julekalender/{calId} {
       allow read: if isAdult();
       allow create: if isAdult()

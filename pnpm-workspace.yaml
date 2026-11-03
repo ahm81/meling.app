@@ -9,5 +9,6 @@ allowBuilds:
   '@google/genai': false
   esbuild: true
   protobufjs: true
+  sharp: true
   # Optional native regex engine for firebase-tools; not needed.
   re2: false

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Bbox, Hidden, Step } from "@meling/shared";
+import sharp from "sharp";
 
 const FULL: Bbox = { x: 0, y: 0, w: 1, h: 1 };
 
@@ -34,4 +35,39 @@ export function maskKey(masks: Bbox[]): string {
   const tuples = masks.map((m) => [r(m.x), r(m.y), r(m.w), r(m.h)]).sort((a, b) => a.join(",").localeCompare(b.join(",")));
   const canon = JSON.stringify(tuples);
   return createHash("sha256").update(canon).digest("hex").slice(0, 12);
+}
+
+/** The grey painted over hidden regions in cutouts. */
+export const MASK_COLOR = "#C2C8CC";
+
+/** Normalised [start, start+size) on an axis of `total` pixels, clamped to the image and at least 1 px. */
+function toPixels(start: number, size: number, total: number): { offset: number; length: number } {
+  const offset = Math.min(Math.max(Math.round(start * total), 0), total - 1);
+  const end = Math.min(Math.max(Math.round((start + size) * total), offset + 1), total);
+  return { offset, length: end - offset };
+}
+
+/**
+ * Crops a page image to the step's box (normalised page coordinates) and paints the masks
+ * (normalised relative to the step's box, as from maskFor) in MASK_COLOR. Returns WebP.
+ */
+export async function renderCutout(pageImage: Buffer, bbox: Bbox, masks: Bbox[]): Promise<Buffer> {
+  const { width = 1, height = 1 } = await sharp(pageImage).metadata();
+  const x = toPixels(bbox.x, bbox.w, width);
+  const y = toPixels(bbox.y, bbox.h, height);
+  const crop = await sharp(pageImage)
+    .extract({ left: x.offset, top: y.offset, width: x.length, height: y.length })
+    .removeAlpha()
+    .png()
+    .toBuffer();
+  const overlays = masks.map((m) => {
+    const mx = toPixels(m.x, m.w, x.length);
+    const my = toPixels(m.y, m.h, y.length);
+    return {
+      input: { create: { width: mx.length, height: my.length, channels: 3 as const, background: MASK_COLOR } },
+      left: mx.offset,
+      top: my.offset,
+    };
+  });
+  return sharp(crop).composite(overlays).webp({ quality: 85 }).toBuffer();
 }

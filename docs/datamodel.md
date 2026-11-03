@@ -37,6 +37,16 @@ Bare voksne (`role == "adult"`) har tilgang. Klienter kan aldri slette.
 | `julekalender/{calId}/pages/{id}`        | voksne | aldri (bare functions)                                                           |
 | `julekalender/{calId}/versions/{id}`     | voksne | aldri (bare functions)                                                           |
 
+Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette dem):
+
+- `julekalender/{calId}.draftUpdatedAt` (timestamp): settes hver gang `draft` endres. Et utkast som har stått i
+  `running` i mer enn 15 minutter, kan lages på nytt med `redraft`.
+- `julekalender/{calId}/manuals/{id}.updatedAt` (timestamp): settes ved hver status- og fremdriftsendring. En manual
+  i `error`, eller i `rendering`/`analyzing` uten endring på mer enn 15 minutter, kan kjøres på nytt med `retryManual`.
+
+Endringer i planen skjer bare gjennom callable functions som krever `role == "adult"`: `editPlan`,
+`restoreVersion`, `redraft`, `renderCutouts` og `retryManual`.
+
 ## Storage
 
 Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for alle andre.

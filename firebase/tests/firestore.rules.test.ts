@@ -224,6 +224,13 @@ describe("julekalender", () => {
     await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), { ...newManual("uploaded", "m2"), pagesAnalyzed: 3 }));
   });
 
+  it("denies clients setting the function-only timestamps", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), { ...newManual("uploaded", "m2"), updatedAt: new Date() }));
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), { ...newCalendar("amund"), draftUpdatedAt: new Date() }));
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { draftUpdatedAt: new Date() }));
+  });
+
   it("children cannot create manuals", async () => {
     const db = env.authenticatedContext("ida").firestore();
     await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded", "m2")));

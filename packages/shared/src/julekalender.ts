@@ -97,6 +97,9 @@ export const CalendarDoc = z.object({
   draft: z.enum(["waiting", "running", "done", "error"]),
   draftError: z.string().nullable(),
   createdBy: z.string(),
+  // Set by functions whenever `draft` changes; a "running" draft older than 15 minutes can be redone.
+  // A Date here; readers convert the Firestore Timestamp before parsing.
+  draftUpdatedAt: z.date().optional(),
 });
 export type CalendarDoc = z.infer<typeof CalendarDoc>;
 
@@ -109,6 +112,9 @@ export const ManualDoc = z.object({
   pagesAnalyzed: z.int(),
   setNumber: z.string().nullable(),
   error: z.string().nullable(),
+  // Set by functions on every status or progress write; a manual stuck in "rendering" or "analyzing"
+  // for more than 15 minutes can be retried. Never set by clients. A Date here (readers convert).
+  updatedAt: z.date().optional(),
 });
 export type ManualDoc = z.infer<typeof ManualDoc>;
 
