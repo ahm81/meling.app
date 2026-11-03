@@ -58,7 +58,9 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
 - Autentisering mot Google Cloud skjer med Workload Identity (ingen nøkler i GitHub), med to kontoer:
   `github-deployer` (full deploy, kun GitHub-miljøet `production`, som bare `main` kan bruke) og
   `github-preview` (kun Hosting, kun GitHub-miljøet `preview`).
-  Engangsoppsett: `scripts/setup-github-deploy.sh`. Repo-variablene er
+  Engangsoppsett: `scripts/setup-github-deploy.sh`. Den må kjøres (av en prosjekteier) før første deploy av functions:
+  den slår på API-ene for Functions 2. gen, Eventarc, Pub/Sub, regler og Vertex AI og gir tjenesteagentene rollene
+  Firestore-triggere og `firestore.get` i `storage.rules` trenger. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
 - Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.
 - Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`, men API-nøkkelen committes aldri. CI setter
