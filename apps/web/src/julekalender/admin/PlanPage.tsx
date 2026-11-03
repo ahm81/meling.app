@@ -3,13 +3,10 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { DOOR_COUNT, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
 import { DayDetail } from "./DayDetail";
-import { buildSteps, callableError, dayRows, indexSteps, manualName } from "./plan-view";
+import { REDRAFT_CONFIRM, buildSteps, callableError, dayRows, indexSteps, manualName } from "./plan-view";
 import { useCalendar } from "./useCalendar";
 import { useCutouts } from "./useCutouts";
 import { usePages } from "./usePages";
-
-const REDRAFT_CONFIRM =
-  "Dette lager en ny versjon. Den gamle kan gjenopprettes fra historikken. AI-ens skjulte områder beregnes på nytt, også de du har vist igjen.";
 
 /** «Fordeling»: the 24 days, the selected day in detail, edits and the parts reconciliation. */
 export function PlanPage() {

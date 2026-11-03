@@ -34,7 +34,7 @@ Julekalenderen for ett barn og ett år. Id er `{år}-{barnets uid}` (`calendarId
 | Sti                                      | Les    | Skriv fra klient                                                                 |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
 | `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` og `childName` |
-| `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`, nøyaktig feltene i `ManualDoc` og id av `[A-Za-z0-9_-]` (Firestore auto-id); ellers aldri |
+| `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`, nøyaktig feltene i `ManualDoc` og id av `[A-Za-z0-9_-]` (Firestore auto-id). Oppdater: bare `order` (heltall, minst 1). Slett: aldri (bruk `deleteManual`) |
 | `julekalender/{calId}/pages/{manualId}_{side}` | voksne | aldri (bare functions)                                                     |
 | `julekalender/{calId}/versions/{nr}`     | voksne | aldri (bare functions). Id er versjonsnummeret med 6 sifre (`000001`)            |
 
@@ -52,7 +52,7 @@ Julekalenderen for ett barn og ett år. Id er `{år}-{barnets uid}` (`calendarId
 | `createdBy`       | uid                                           | klient ved opprettelse |
 | `draftUpdatedAt`  | timestamp (valgfri)                           | bare functions |
 
-**Manual** (`ManualDoc`): `order` (rekkefølge, fra 1), `fileName`, `storagePath` (PDF i Storage), `status`
+**Manual** (`ManualDoc`): `order` (heftenes rekkefølge, fra 1; voksne kan endre den), `fileName`, `storagePath` (PDF i Storage), `status`
 (`uploaded` → `rendering` → `analyzing` → `done`, eller `error`), `pageCount`, `pagesAnalyzed`, `setNumber`, `error`
 og `updatedAt` (valgfri, bare functions). Klienten oppretter dokumentet med `status: "uploaded"`; functions gjør resten.
 
@@ -77,6 +77,10 @@ Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette 
 - `julekalender/{calId}/manuals/{id}.updatedAt` (timestamp): settes ved hver status- og fremdriftsendring. En manual
   i `error`, eller i `rendering`/`analyzing` uten endring på mer enn 15 minutter, kan kjøres på nytt med `retryManual`.
 
+Fordelingen lagrer ikke hvilke manualer den ble laget av. Admin utleder det fra planen: manualene er de som
+trinn-id-ene (`{manualId}:…`) og de skjulte områdene viser til, og rekkefølgen er den trinnene først dukker opp i
+dagene. Avviker dette fra manualene nå (ny, slettet eller flyttet manual), foreslår admin et nytt utkast.
+
 Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser med zod-skjemaene.
 
 **Callable functions** (`europe-west1`, krever `role == "adult"`) er den eneste veien til å endre fordelingen:
@@ -87,7 +91,8 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 | `restoreVersion` | `{ calendarId, baseVersion, fromVersion }`: lager en ny versjon med planen til `fromVersion` og `restoredFrom` satt |
 | `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter) |
 | `renderCutouts`  | `{ calendarId, version }`: lager utklippene til pakkelisten i Storage                        |
-| `retryManual`    | `{ calendarId, manualId }`: kjører rendering og analyse på nytt for en manual                |
+| `retryManual`    | `{ calendarId, manualId }`: fortsetter rendering og analyse for en manual. Sider som allerede er analysert, og bildene deres, beholdes; bare de manglende sidene analyseres. Utklippene til manualen slettes |
+| `deleteManual`   | `{ calendarId, manualId }`: sletter manualen med sider, sidebilder, utklipp og PDF. Ikke mens den leses (med mindre den har stått fast i mer enn 15 minutter). Versjonene endres ikke; venter kalenderen på førsteutkastet og alle gjenværende manualer er lest, lages det |
 
 `baseVersion` må være `currentVersion`; ellers svarer funksjonen `failed-precondition` (noen andre har endret planen).
 

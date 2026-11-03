@@ -389,6 +389,12 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.manual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .manual-status {
   font-size: 0.875rem;
   color: var(--muted);

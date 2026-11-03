@@ -32,3 +32,10 @@ export const retryManual = httpsCallable<{ calendarId: string; manualId: string 
   "retryManual",
   long,
 );
+
+// May make the first draft when the deleted manual was the last one holding it back.
+export const deleteManual = httpsCallable<{ calendarId: string; manualId: string }, { ok: true }>(
+  functions,
+  "deleteManual",
+  long,
+);

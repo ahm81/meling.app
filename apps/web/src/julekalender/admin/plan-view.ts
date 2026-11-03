@@ -19,6 +19,43 @@ export function buildSteps(pages: PageDoc[], manuals: Pick<Manual, "id" | "order
   );
 }
 
+export const REDRAFT_CONFIRM =
+  "Dette lager en ny versjon. Den gamle kan gjenopprettes fra historikken. AI-ens skjulte områder beregnes på nytt, også de du har vist igjen.";
+
+/** The manual id of a step id `${manualId}:${page}:${index}`. */
+const manualOfStep = (stepId: string) => stepId.slice(0, stepId.indexOf(":"));
+
+/**
+ * Whether the manuals (or their order) differ from what the plan was built from. The plan has no list of
+ * its manuals, so it is derived: the manuals are those its steps and hidden regions refer to, and their
+ * order is the order in which their steps first appear in the days (moves never reorder steps).
+ */
+export function manualsChangedSincePlan(plan: Plan, manuals: Pick<Manual, "id" | "order">[]): boolean {
+  const stepOrder: string[] = [];
+  for (const id of plan.days.flatMap((d) => d.stepIds)) {
+    const m = manualOfStep(id);
+    if (!stepOrder.includes(m)) stepOrder.push(m);
+  }
+  const inPlan = new Set([...stepOrder, ...plan.hidden.map((h) => h.manualId)]);
+  const current = [...manuals].sort((a, b) => a.order - b.order).map((m) => m.id);
+  if (current.length !== inPlan.size || current.some((id) => !inPlan.has(id))) return true;
+  const currentWithSteps = current.filter((id) => stepOrder.includes(id));
+  return currentWithSteps.some((id, i) => id !== stepOrder[i]);
+}
+
+/** New `order` values (1, 2, …) after moving the manual at `index` one place up (-1) or down (+1). */
+export function reorderedManuals(
+  manuals: Pick<Manual, "id" | "order">[],
+  index: number,
+  dir: -1 | 1,
+): { id: string; order: number }[] {
+  const list = [...manuals].sort((a, b) => a.order - b.order);
+  const j = index + dir;
+  if (index < 0 || j < 0 || index >= list.length || j >= list.length) return [];
+  [list[index], list[j]] = [list[j]!, list[index]!];
+  return list.flatMap((m, i) => (m.order === i + 1 ? [] : [{ id: m.id, order: i + 1 }]));
+}
+
 export interface StepIndex {
   byId: Map<string, Step>;
   /** 1-based position in the global build order. */

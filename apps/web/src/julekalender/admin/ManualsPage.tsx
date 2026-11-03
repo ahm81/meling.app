@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useParams } from "react-router";
-import { collection, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { ref, uploadBytesResumable } from "firebase/storage";
 import { Wishes, paths, storagePaths } from "@meling/shared";
 import { db, storage } from "../../firebase";
-import { redraft, retryManual } from "./api";
-import { manualName } from "./plan-view";
+import { deleteManual, redraft, retryManual } from "./api";
+import { REDRAFT_CONFIRM, callableError, manualName, manualsChangedSincePlan, reorderedManuals } from "./plan-view";
 import { usePages } from "./usePages";
 import { useCalendar, type Manual } from "./useCalendar";
 
@@ -38,16 +38,28 @@ function ManualRow({
   now,
   onRetry,
   retrying,
-  retryError,
+  onDelete,
+  deleting,
+  onUp,
+  onDown,
+  rowError,
 }: {
   manual: Manual;
   now: number;
   onRetry: () => void;
   retrying: boolean;
-  retryError: string | null;
+  onDelete: () => void;
+  deleting: boolean;
+  /** Null when the manual cannot move that way (first or last, or a reorder is in progress). */
+  onUp: (() => void) | null;
+  onDown: (() => void) | null;
+  rowError: string | null;
 }) {
-  const stale = (manual.status === "rendering" || manual.status === "analyzing") && isStale(manual.updatedAt, now);
+  const processing = manual.status === "rendering" || manual.status === "analyzing";
+  const stale = processing && isStale(manual.updatedAt, now);
   const canRetry = manual.status === "error" || stale;
+  // The function refuses while the AI is reading, unless the manual is stuck.
+  const canDelete = !processing || stale;
   let status: string;
   let tone = "";
   switch (manual.status) {
@@ -83,23 +95,41 @@ function ManualRow({
         </span>
         {stale && <span className="manual-status err">Ser ut til å ha stoppet.</span>}
         {showBar && <progress max={100} value={percent} aria-label="Fremdrift" />}
-        {retryError && (
+        {rowError && (
           <span className="manual-status err" role="alert">
-            {retryError}
+            {rowError}
           </span>
         )}
       </div>
-      {canRetry && (
-        <button onClick={onRetry} disabled={retrying}>
-          {retrying ? "Prøver …" : "Prøv igjen"}
+      <div className="manual-actions">
+        <button onClick={onUp ?? undefined} disabled={!onUp} aria-label={`Flytt ${manualName(manual)} opp`} title="Flytt opp">
+          ↑
         </button>
-      )}
+        <button onClick={onDown ?? undefined} disabled={!onDown} aria-label={`Flytt ${manualName(manual)} ned`} title="Flytt ned">
+          ↓
+        </button>
+        {canRetry && (
+          <button onClick={onRetry} disabled={retrying || deleting}>
+            {retrying ? "Prøver …" : "Prøv igjen"}
+          </button>
+        )}
+        {canDelete && (
+          <button onClick={onDelete} disabled={deleting || retrying}>
+            {deleting ? "Sletter …" : "Slett"}
+          </button>
+        )}
+      </div>
     </li>
   );
 }
 
 export function ManualsPage() {
   const { calId = "" } = useParams();
+  // A new calendar starts with fresh state (uploads, wishes form, order counter).
+  return <CalendarManuals key={calId} calId={calId} />;
+}
+
+function CalendarManuals({ calId }: { calId: string }) {
   const { calendar, manuals, currentVersion, error } = useCalendar(calId);
   const { pages, error: pagesError } = usePages(calId);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -107,7 +137,13 @@ export function ManualsPage() {
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [retrying, setRetrying] = useState<Record<string, boolean>>({});
-  const [retryErrors, setRetryErrors] = useState<Record<string, string>>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
+  const [reordering, setReordering] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const reorderingRef = useRef(false);
+  const deletingRef = useRef(new Set<string>());
+  const redraftingRef = useRef(false);
   const [redrafting, setRedrafting] = useState(false);
   const [redraftError, setRedraftError] = useState<string | null>(null);
   const [balance, setBalance] = useState<Wishes["balance"]>("bricks");
@@ -220,22 +256,63 @@ export function ManualsPage() {
 
   async function retry(m: Manual) {
     setRetrying((r) => ({ ...r, [m.id]: true }));
-    setRetryErrors((r) => ({ ...r, [m.id]: "" }));
+    setRowErrors((r) => ({ ...r, [m.id]: "" }));
     // Progress arrives through Firestore snapshots; the reply can take many minutes.
     retryManual({ calendarId: calId, manualId: m.id })
       .catch((e) => {
         console.error(e);
-        setRetryErrors((r) => ({ ...r, [m.id]: "Kunne ikke starte på nytt. Prøv igjen om litt." }));
+        setRowErrors((r) => ({ ...r, [m.id]: "Kunne ikke starte på nytt. Prøv igjen om litt." }));
       })
       .finally(() => setRetrying((r) => ({ ...r, [m.id]: false })));
   }
 
+  function remove(m: Manual) {
+    if (deletingRef.current.has(m.id)) return;
+    if (!window.confirm(`Slette ${manualName(m)}? Sidene og utklippene fra manualen slettes også.`)) return;
+    deletingRef.current.add(m.id);
+    setDeleting((d) => ({ ...d, [m.id]: true }));
+    setRowErrors((r) => ({ ...r, [m.id]: "" }));
+    // The row disappears through the manuals snapshot.
+    deleteManual({ calendarId: calId, manualId: m.id })
+      .catch((e) => {
+        console.error(e);
+        setRowErrors((r) => ({ ...r, [m.id]: callableError(e).message }));
+      })
+      .finally(() => {
+        deletingRef.current.delete(m.id);
+        setDeleting((d) => ({ ...d, [m.id]: false }));
+      });
+  }
+
+  async function move(index: number, dir: -1 | 1) {
+    if (reorderingRef.current) return;
+    const changes = reorderedManuals(manuals, index, dir);
+    if (changes.length === 0) return;
+    reorderingRef.current = true;
+    setReordering(true);
+    setOrderError(null);
+    try {
+      const batch = writeBatch(db);
+      for (const { id, order } of changes) batch.update(doc(db, paths.manual(calId, id)), { order });
+      await batch.commit();
+    } catch (e) {
+      console.error(e);
+      setOrderError("Kunne ikke endre rekkefølgen. Prøv igjen.");
+    } finally {
+      reorderingRef.current = false;
+      setReordering(false);
+    }
+  }
+
   function startRedraft() {
-    if (!calendar || redrafting) return;
+    if (!calendar || redraftingRef.current) return;
     const ok = window.confirm(
-      "AI-en beregner det den skjuler for barnet på nytt. Eventuelle endringer du har gjort i hva som skjules, kan gå tapt. Vil du fortsette?",
+      calendar.currentVersion !== null
+        ? REDRAFT_CONFIRM
+        : "AI-en beregner det den skjuler for barnet på nytt. Eventuelle endringer du har gjort i hva som skjules, kan gå tapt. Vil du fortsette?",
     );
     if (!ok) return;
+    redraftingRef.current = true;
     setRedrafting(true);
     setRedraftError(null);
     redraft({ calendarId: calId, baseVersion: calendar.currentVersion })
@@ -243,7 +320,10 @@ export function ManualsPage() {
         console.error(e);
         setRedraftError("Kunne ikke lage nytt utkast. Prøv igjen om litt.");
       })
-      .finally(() => setRedrafting(false));
+      .finally(() => {
+        redraftingRef.current = false;
+        setRedrafting(false);
+      });
   }
 
   async function saveWishes() {
@@ -265,6 +345,8 @@ export function ManualsPage() {
   const anyAnalysis = manuals.some((m) => m.status !== "uploaded") || pages.length > 0;
   const activeStep = hasPlan || calendar.draft === "done" ? 2 : manuals.length > 0 ? 1 : 0;
   const busyUploading = uploads.some((u) => !u.done && !u.error);
+  const manualsChanged = hasPlan && currentVersion !== null && manualsChangedSincePlan(currentVersion.plan, manuals);
+  const allRead = manuals.length > 0 && manuals.every((m) => m.status === "done");
 
   return (
     <section className="manuals">
@@ -308,79 +390,93 @@ export function ManualsPage() {
           </button>
         </div>
       )}
+      {manualsChanged && calendar.draft !== "running" && (
+        <div className="banner run" role="status">
+          <span>
+            Manualene er endret siden fordelingen ble laget.
+            {!allRead && " Vent til AI-en har lest alle manualene."}
+          </span>
+          <button onClick={startRedraft} disabled={redrafting || !allRead}>
+            {redrafting ? "Lager utkast …" : "Lag nytt utkast"}
+          </button>
+        </div>
+      )}
       {redraftError && <p role="alert">{redraftError}</p>}
 
       <div className="card">
         <h2>Manualer</h2>
-        {currentVersion !== null || hasPlan ? (
-          <p>Fordelingen er laget. Last opp på nytt ved å lage en ny kalender.</p>
-        ) : (
-          <>
-            <div
-              className={`dropzone${dragging ? " over" : ""}`}
-              onDragOver={(e) => (e.preventDefault(), setDragging(true))}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-            >
-              <p>Slipp PDF-manualer her</p>
-              <label className="btn primary-label" htmlFor="pdf-input">
-                Velg PDF-filer
-              </label>
-              <input
-                id="pdf-input"
-                type="file"
-                accept="application/pdf,.pdf"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files) addFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <small>Kun PDF, under 50 MB per fil.</small>
-            </div>
-            {fileErrors.map((m) => (
-              <p key={m} role="alert" className="manual-status err">
-                {m}
-              </p>
+        <div
+          className={`dropzone${dragging ? " over" : ""}`}
+          onDragOver={(e) => (e.preventDefault(), setDragging(true))}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
+          <p>Slipp PDF-manualer her</p>
+          <label className="btn primary-label" htmlFor="pdf-input">
+            Velg PDF-filer
+          </label>
+          <input
+            id="pdf-input"
+            type="file"
+            accept="application/pdf,.pdf"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <small>Kun PDF, under 50 MB per fil.</small>
+        </div>
+        {fileErrors.map((m) => (
+          <p key={m} role="alert" className="manual-status err">
+            {m}
+          </p>
+        ))}
+        {uploads.length > 0 && (
+          <ul className="manual-list">
+            {uploads.map((u) => (
+              <li key={u.key} className="manual-row">
+                <div className="manual-main">
+                  <strong>{u.name}</strong>
+                  {u.error ? (
+                    <span className="manual-status err" role="alert">
+                      {u.error}
+                    </span>
+                  ) : u.done ? (
+                    <span className="manual-status ok">Lastet opp</span>
+                  ) : (
+                    <>
+                      <span className="manual-status">Laster opp … {u.percent} %</span>
+                      <progress max={100} value={u.percent} aria-label="Opplasting" />
+                    </>
+                  )}
+                </div>
+              </li>
             ))}
-            {uploads.length > 0 && (
-              <ul className="manual-list">
-                {uploads.map((u) => (
-                  <li key={u.key} className="manual-row">
-                    <div className="manual-main">
-                      <strong>{u.name}</strong>
-                      {u.error ? (
-                        <span className="manual-status err" role="alert">
-                          {u.error}
-                        </span>
-                      ) : u.done ? (
-                        <span className="manual-status ok">Lastet opp</span>
-                      ) : (
-                        <>
-                          <span className="manual-status">Laster opp … {u.percent} %</span>
-                          <progress max={100} value={u.percent} aria-label="Opplasting" />
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {busyUploading && <small>Ikke lukk siden før opplastingen er ferdig.</small>}
-          </>
+          </ul>
         )}
+        {busyUploading && <small>Ikke lukk siden før opplastingen er ferdig.</small>}
 
+        {orderError && (
+          <p role="alert" className="manual-status err">
+            {orderError}
+          </p>
+        )}
         {manuals.length > 0 ? (
           <ul className="manual-list">
-            {manuals.map((m) => (
+            {manuals.map((m, i) => (
               <ManualRow
                 key={m.id}
                 manual={m}
                 now={now}
                 retrying={!!retrying[m.id]}
-                retryError={retryErrors[m.id] || null}
                 onRetry={() => void retry(m)}
+                deleting={!!deleting[m.id]}
+                onDelete={() => remove(m)}
+                onUp={i > 0 && !reordering ? () => void move(i, -1) : null}
+                onDown={i < manuals.length - 1 && !reordering ? () => void move(i, 1) : null}
+                rowError={rowErrors[m.id] || null}
               />
             ))}
           </ul>

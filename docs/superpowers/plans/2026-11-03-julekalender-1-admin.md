@@ -407,7 +407,7 @@ Merk for utrulling (ikke kode): eksisterende `members/loq3DiMBpAXv7p2KY4titOrTcx
   - «Ønsker til fordelingen»: `balance` (select) og fritekst. Lagres på kalenderen.
   - «Dette har AI-en funnet» (antall trinn og sider med to trinn) og «Skjules for barnet» (liste over spoilere fra sidene), skrivebeskyttet her
   - banner når `draft` er `running`, `done` (lenke til fordelingen) eller `error` (vis `draftError`)
-  - Hvis `currentVersion != null`, er opplasting av flere manualer skjult. Da vises teksten «Fordelingen er laget. Last opp på nytt ved å lage en ny kalender.» (del 1 støtter ikke å bytte manualer).
+  - Opplasting er alltid mulig, også etter at fordelingen er laget. Voksne endrer rekkefølgen på heftene (pil opp/ned) og sletter et hefte (`deleteManual`). Er manualene eller rekkefølgen endret siden gjeldende versjon, vises «Manualene er endret siden fordelingen ble laget.» med «Lag nytt utkast» (endret i den avsluttende gjennomgangen).
 - [ ] **Step 1: Implementer** siden.
 - [ ] **Step 2: Verifiser mot emulatorene** med `MELING_FAKE_AI=1` satt for functions-emulatoren (eksporter i `.env.local` for functions, som er gitignorert). Last opp `6242006.pdf` og `6242011.pdf` og se fremdriften gå til «Lest» og banneret «Førsteutkast klart».
 - [ ] **Step 3: Kjør** `pnpm typecheck && pnpm build`. Forventet: grønt.
