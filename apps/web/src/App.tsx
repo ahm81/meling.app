@@ -5,6 +5,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { MemberDoc, paths } from "@meling/shared";
 import { auth, db, useEmulators } from "./firebase";
 import { AdminShell, AdultOnly, Placeholder } from "./julekalender/admin/AdminShell";
+import { ManualsPage } from "./julekalender/admin/ManualsPage";
 import { Overview } from "./julekalender/admin/Overview";
 
 type Access =
@@ -98,7 +99,7 @@ export function App() {
           <Route index element={<Overview uid={user.uid} />} />
           <Route path=":calId" element={<AdminShell />}>
             <Route index element={<Navigate to="manualer" replace />} />
-            <Route path="manualer" element={<Placeholder title="Manualer" />} />
+            <Route path="manualer" element={<ManualsPage />} />
             <Route path="fordeling" element={<Placeholder title="Fordeling" />} />
             <Route path="historikk" element={<Placeholder title="Historikk" />} />
             <Route path="pakkeliste" element={<Placeholder title="Pakkeliste" />} />
