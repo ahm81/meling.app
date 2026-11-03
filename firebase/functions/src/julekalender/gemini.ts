@@ -27,27 +27,49 @@ export interface Ai {
   ): Promise<unknown>;
 }
 
-export function vertexAi(): Ai {
+type GenerateResponse = { text?: string; candidates?: { finishReason?: string }[] };
+export type GenerateClient = { models: { generateContent(req: never): Promise<GenerateResponse> } };
+
+/** Turns a Gemini response into parsed JSON, or throws an error with context and the original cause. */
+export function parseGeminiResponse(res: GenerateResponse, context: string): unknown {
+  const fail = (reason: string, cause?: unknown) => new Error(`Gemini ${context}: ${reason}`, { cause });
+  const finish = res.candidates?.[0]?.finishReason;
+  if (finish !== undefined && finish !== "STOP") throw fail(`avsluttet med ${finish}`);
+  if (!res.text) throw fail("tomt svar");
+  try {
+    return JSON.parse(res.text) as unknown;
+  } catch (e) {
+    throw fail("ugyldig JSON", e);
+  }
+}
+
+export function vertexAi(client: GenerateClient = new GoogleGenAI({ vertexai: true, project: "meling-app", location: "global" }) as unknown as GenerateClient): Ai {
   // Vertex AI via Application Default Credentials; no key.
-  const client = new GoogleGenAI({ vertexai: true, project: "meling-app", location: "global" });
-  const generate = async (contents: unknown, schema: z.ZodType) => {
-    const res = await client.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: contents as never,
-      config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(schema) },
-    });
-    return JSON.parse(res.text ?? "null") as unknown;
+  const generate = async (contents: unknown, schema: z.ZodType, context: string) => {
+    let res: GenerateResponse;
+    try {
+      res = await client.models.generateContent({
+        model: GEMINI_MODEL,
+        contents,
+        config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(schema) },
+      } as never);
+    } catch (e) {
+      throw new Error(`Gemini ${context}: kallet feilet`, { cause: e });
+    }
+    return parseGeminiResponse(res, context);
   };
   return {
-    analyzePage: (png) =>
+    analyzePage: (png, page) =>
       generate(
         [{ role: "user", parts: [{ inlineData: { mimeType: "image/png", data: png.toString("base64") } }, { text: PAGE_PROMPT }] }],
         RawPageAnalysis,
+        `side ${page}`,
       ),
     interpretWishes: (text, steps) =>
       generate(
         [{ role: "user", parts: [{ text: `${WISHES_PROMPT}\n\nØnsker:\n${text}\n\nTrinn:\n${JSON.stringify(steps)}` }] }],
         RawConstraints,
+        "ønsker",
       ),
   };
 }

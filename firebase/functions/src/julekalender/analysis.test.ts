@@ -1,7 +1,8 @@
 import { PageAnalysis } from "@meling/shared";
 import { describe, expect, it } from "vitest";
-import { toConstraints, toPageAnalysis } from "./analysis";
-import { fakeAi } from "./gemini";
+import { z } from "zod";
+import { RawConstraints, RawPageAnalysis, toConstraints, toPageAnalysis } from "./analysis";
+import { fakeAi, vertexAi } from "./gemini";
 
 const step = (box: number[], extra: object = {}) => ({
   printed_number: 1,
@@ -97,5 +98,39 @@ describe("fakeAi", () => {
     const p = toPageAnalysis(await ai.analyzePage(Buffer.alloc(0), 5));
     expect(p.analysis.steps).toHaveLength(2);
     expect(p.analysis.steps[0]!.parts).toHaveLength(3);
+  });
+});
+
+describe("RawPageAnalysis", () => {
+  it("rejects missing steps and malformed box_2d", () => {
+    expect(() => RawPageAnalysis.parse({ kind: "cover" })).toThrow();
+    expect(() => toPageAnalysis(raw([step([1, 2, 3] as never)]))).toThrow();
+    expect(() => toPageAnalysis(raw([step([1, 2, 3, "x"] as never)]))).toThrow();
+  });
+  it("swaps inverted boxes", () => {
+    const b = toPageAnalysis(raw([step([600, 700, 100, 200])])).analysis.steps[0]!.bbox;
+    expect(b.x).toBeCloseTo(0.2);
+    expect(b.y).toBeCloseTo(0.1);
+    expect(b.w).toBeCloseTo(0.5);
+  });
+  it("converts to JSON schema", () => {
+    expect(() => z.toJSONSchema(RawPageAnalysis)).not.toThrow();
+    expect(() => z.toJSONSchema(RawConstraints)).not.toThrow();
+  });
+});
+
+describe("Gemini response handling", () => {
+  const client = (res: object | Error) =>
+    ({ models: { generateContent: async () => { if (res instanceof Error) throw res; return res; } } }) as never;
+  const run = (res: object | Error) => vertexAi(client(res)).analyzePage(Buffer.alloc(0), 7);
+  it("parses a good response", async () => {
+    expect(await run({ text: '{"a":1}', candidates: [{ finishReason: "STOP" }] })).toEqual({ a: 1 });
+  });
+  it("fails with context on empty, bad finish, bad JSON and SDK errors", async () => {
+    await expect(run({})).rejects.toThrow(/side 7: tomt svar/);
+    await expect(run({ text: "{}", candidates: [{ finishReason: "MAX_TOKENS" }] })).rejects.toThrow(/MAX_TOKENS/);
+    await expect(run({ text: "{oops" })).rejects.toMatchObject({ message: expect.stringMatching(/side 7: ugyldig JSON/), cause: expect.any(SyntaxError) });
+    const cause = new Error("net");
+    await expect(run(cause)).rejects.toMatchObject({ cause });
   });
 });
