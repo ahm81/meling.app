@@ -231,6 +231,12 @@ describe("julekalender", () => {
     await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { draftUpdatedAt: new Date() }));
   });
 
+  it("denies manual ids outside [A-Za-z0-9_-]", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m:2")), newManual("uploaded", "m:2")));
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m.2")), newManual("uploaded", "m.2")));
+  });
+
   it("children cannot create manuals", async () => {
     const db = env.authenticatedContext("ida").firestore();
     await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded", "m2")));

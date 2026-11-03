@@ -33,7 +33,7 @@ Bare voksne (`role == "adult"`) har tilgang. Klienter kan aldri slette.
 | Sti                                      | Les    | Skriv fra klient                                                                 |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
 | `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` og `childName` |
-| `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`; ellers aldri                                 |
+| `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"` og id av `[A-Za-z0-9_-]` (Firestore auto-id); ellers aldri |
 | `julekalender/{calId}/pages/{id}`        | voksne | aldri (bare functions)                                                           |
 | `julekalender/{calId}/versions/{id}`     | voksne | aldri (bare functions)                                                           |
 
@@ -41,6 +41,9 @@ Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette 
 
 - `julekalender/{calId}.draftUpdatedAt` (timestamp): settes hver gang `draft` endres. Et utkast som har stått i
   `running` i mer enn 15 minutter, kan lages på nytt med `redraft`.
+- `draftError` er feilmeldingen fra siste mislykkede utkast. Feiler `redraft` på en kalender med `draft == "done"`,
+  forblir `draft` `"done"` (gjeldende versjon er uendret), men `draftError` får meldingen. Et vellykket utkast setter
+  den til `null`.
 - `julekalender/{calId}/manuals/{id}.updatedAt` (timestamp): settes ved hver status- og fremdriftsendring. En manual
   i `error`, eller i `rendering`/`analyzing` uten endring på mer enn 15 minutter, kan kjøres på nytt med `retryManual`.
 

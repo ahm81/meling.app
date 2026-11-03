@@ -43,7 +43,9 @@ service cloud.firestore {
 
       match /manuals/{manualId} {
         allow read: if isAdult();
+        // Firestore auto-ids; no ':' since step ids are `${manualId}:${page}:${index}`.
         allow create: if isAdult()
+          && manualId.matches('^[A-Za-z0-9_-]+$')
           && request.resource.data.keys().hasOnly(
             ['order', 'fileName', 'storagePath', 'status', 'pageCount', 'pagesAnalyzed', 'setNumber', 'error'])
           && request.resource.data.keys().hasAll(

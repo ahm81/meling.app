@@ -23,4 +23,8 @@ export const storagePaths = {
     `${Collections.julekalender}/${calId}/pages/${manualId}/${page}.png`,
   cutout: (calId: string, stepId: string, maskKey: string) =>
     `${Collections.julekalender}/${calId}/cutouts/${stepId}/${maskKey}.webp`,
+  // Folder prefixes (with trailing slash) for deleting a manual's derived files.
+  pagesDir: (calId: string, manualId: string) =>
+    `${Collections.julekalender}/${calId}/pages/${manualId}/`,
+  cutoutsDir: (calId: string) => `${Collections.julekalender}/${calId}/cutouts/`,
 };

@@ -52,7 +52,8 @@ function toPixels(start: number, size: number, total: number): { offset: number;
  * (normalised relative to the step's box, as from maskFor) in MASK_COLOR. Returns WebP.
  */
 export async function renderCutout(pageImage: Buffer, bbox: Bbox, masks: Bbox[]): Promise<Buffer> {
-  const { width = 1, height = 1 } = await sharp(pageImage).metadata();
+  const { width, height } = await sharp(pageImage).metadata();
+  if (!width || !height) throw new Error("Sidebildet mangler størrelse.");
   const x = toPixels(bbox.x, bbox.w, width);
   const y = toPixels(bbox.y, bbox.h, height);
   const crop = await sharp(pageImage)

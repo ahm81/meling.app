@@ -41,8 +41,9 @@ export async function requireAdult(db: Firestore, request: CallRequest): Promise
   return uid;
 }
 
-// Ids become document paths; a slash would reach another document.
-const Id = z.string().min(1).max(200).regex(/^[^/]+$/);
+// Ids become document and Storage paths: Firestore auto-ids, and calendar ids `${year}-${uid}`.
+// No "/" (another document) and no ":" (step ids are `${manualId}:${page}:${index}`).
+const Id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
 
 function parseInput<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -168,12 +169,13 @@ export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequ
   } catch (e) {
     logger.error("Redraft failed", { calId: calendarId, error: e });
     const message = draftErrorMessage(e, "Utkastet");
-    // A calendar that had a finished draft keeps it; otherwise the failure is recorded as for the first draft.
-    const restore =
-      cal.draft === "done"
-        ? { draft: "done", draftError: null, draftUpdatedAt: FieldValue.serverTimestamp() }
-        : { draft: "error", draftError: message, draftUpdatedAt: FieldValue.serverTimestamp() };
-    await safeUpdate(calRef, restore, { calId: calendarId });
+    // A calendar that had a finished draft keeps it (draft stays "done"); otherwise it ends in "error" as for
+    // the first draft. Either way draftError tells a client that gave up waiting what went wrong.
+    await safeUpdate(
+      calRef,
+      { draft: cal.draft === "done" ? "done" : "error", draftError: message, draftUpdatedAt: FieldValue.serverTimestamp() },
+      { calId: calendarId },
+    );
     throw new HttpsError(isDraftDomainError(e) ? "failed-precondition" : "internal", message);
   }
 }
@@ -181,9 +183,6 @@ export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequ
 // ---- retryManual
 
 const RetryManualInput = z.object({ calendarId: Id, manualId: Id });
-
-/** Storage folder (with trailing slash) of a path. */
-const dirOf = (path: string) => path.slice(0, path.lastIndexOf("/") + 1);
 
 /**
  * Processes a manual again from its PDF: allowed when it failed, or has been stuck in "rendering" or
@@ -225,11 +224,10 @@ export async function retryManualHandler(deps: CallableDeps, request: CallReques
   const writer = db.bulkWriter();
   for (const p of pages.docs) void writer.delete(p.ref);
   await writer.close();
-  const cutoutsDir = dirOf(dirOf(storagePaths.cutout(calendarId, "_", "none")).slice(0, -1));
   await Promise.all([
-    bucket.deleteFiles({ prefix: dirOf(storagePaths.pageImage(calendarId, manualId, 1)) }),
+    bucket.deleteFiles({ prefix: storagePaths.pagesDir(calendarId, manualId) }),
     // Step ids start with the manual id: `${manualId}:${page}:${index}`.
-    bucket.deleteFiles({ prefix: `${cutoutsDir}${manualId}:` }),
+    bucket.deleteFiles({ prefix: `${storagePaths.cutoutsDir(calendarId)}${manualId}:` }),
   ]);
 
   await processClaimedManual(deps, calendarId, manualId);

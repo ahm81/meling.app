@@ -302,6 +302,35 @@ describe("callables", () => {
     expect(await calendar(calId)).toMatchObject({ draft: "done", draftError: null, currentVersion: 3 });
   });
 
+  it("restoreVersion of a missing version is not-found", async () => {
+    const calId = await drafted();
+    await expect(
+      restoreVersionHandler(deps(), as("amund", { calendarId: calId, baseVersion: 1, fromVersion: 9 })),
+    ).rejects.toMatchObject({ code: "not-found" });
+  });
+
+  it("redraft with a stale baseVersion is failed-precondition", async () => {
+    const calId = await drafted();
+    await editPlanHandler(deps(), as("amund", { calendarId: calId, baseVersion: 1, ops: [{ type: "hide", hidden: adultHide }], summary: "x" }));
+    await expect(redraftHandler(deps(), as("amund", { calendarId: calId, baseVersion: 1 }))).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+    expect(await calendar(calId)).toMatchObject({ draft: "done", currentVersion: 2 });
+  });
+
+  it("a failed redraft of a finished calendar keeps it done but records the error", async () => {
+    const calId = await drafted();
+    const ai = { ...fakeAi({}), interpretWishes: async () => ({ nonsense: true }) };
+    await db.doc(paths.calendar(calId)).update({ wishes: { balance: "bricks", text: "Bilen på dag 24" } });
+    await expect(redraftHandler({ db, bucket, ai }, as("amund", { calendarId: calId, baseVersion: 1 }))).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "Gemini ønsker: svaret har feil format",
+    });
+    expect(await calendar(calId)).toMatchObject({ draft: "done", draftError: "Gemini ønsker: svaret har feil format", currentVersion: 1 });
+    expect(await redraftHandler(deps(), as("amund", { calendarId: calId, baseVersion: 1 }))).toEqual({ version: 2 });
+    expect(await calendar(calId)).toMatchObject({ draft: "done", draftError: null });
+  });
+
   it("redraft recovers a calendar whose first draft failed", async () => {
     const calId = await seedCalendar({ draft: "error", draftError: "Noe gikk galt" });
     await seedAnalyzedManual(calId, 12);
@@ -370,6 +399,16 @@ describe("callables", () => {
       expect((await db.doc(paths.manual(calId, "m1")).get()).get("status")).toBe("done");
     });
 
+    it("rejects manual and calendar ids with '/' or ':'", async () => {
+      for (const data of [
+        { calendarId: "2026-ida", manualId: "m1/x" },
+        { calendarId: "2026-ida", manualId: "m1:2" },
+        { calendarId: "2026/ida", manualId: "m1" },
+      ]) {
+        await expect(retryManualHandler(deps(), as("amund", data))).rejects.toMatchObject({ code: "invalid-argument" });
+      }
+    });
+
     it("refuses a manual that is still processing or done, and children", async () => {
       const calId = await seedCalendar();
       await failedManual(calId, "rendering", minutesAgo(2));
@@ -389,6 +428,13 @@ describe("callables", () => {
   });
 
   describe("renderCutouts", () => {
+    it("is not-found for a missing version", async () => {
+      const calId = await drafted();
+      await expect(renderCutoutsHandler(deps(), as("amund", { calendarId: calId, version: 5 }))).rejects.toMatchObject({
+        code: "not-found",
+      });
+    });
+
     it("renders masked WebP cutouts once per step and mask set", async () => {
       const calId = await drafted();
       const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: "#ffffff" } }).png().toBuffer();
