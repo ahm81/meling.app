@@ -27,18 +27,34 @@ service cloud.firestore {
     // Julekalender: only adults. Versions and pages are written by functions (admin SDK) only.
     // draftUpdatedAt (calendar) and updatedAt (manual) are set by functions only, so the create shapes omit them.
     match /julekalender/{calId} {
+      // Wishes as in the shared Wishes schema.
+      function validWishes(w) {
+        return w is map
+          && w.keys().hasOnly(['balance', 'text'])
+          && w.keys().hasAll(['balance', 'text'])
+          && w.balance in ['bricks', 'steps']
+          && w.text is string && w.text.size() <= 1000;
+      }
+
       allow read: if isAdult();
       allow create: if isAdult()
         && request.resource.data.keys().hasOnly(
           ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
         && request.resource.data.keys().hasAll(
           ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
+        && request.resource.data.year is int && request.resource.data.year >= 2024
+        && request.resource.data.childUid is string
+        && request.resource.data.childName is string
+        && calId == string(request.resource.data.year) + '-' + request.resource.data.childUid
+        && validWishes(request.resource.data.wishes)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.currentVersion == null
         && request.resource.data.draft == 'waiting'
         && request.resource.data.draftError == null;
       allow update: if isAdult()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wishes', 'childName']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wishes', 'childName'])
+        && validWishes(request.resource.data.wishes)
+        && request.resource.data.childName is string;
       allow delete: if false;
 
       match /manuals/{manualId} {

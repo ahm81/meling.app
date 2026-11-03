@@ -144,6 +144,24 @@ describe("julekalender", () => {
     await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), rest));
   });
 
+  it("denies creating a calendar whose id is not year-childUid", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.calendar("2025-julian")), newCalendar("amund")));
+    await assertFails(setDoc(doc(db, paths.calendar("2026-ida")), newCalendar("amund")));
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), { ...newCalendar("amund"), year: "2026" }));
+  });
+
+  it("denies creating a calendar with bad wishes or names", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    const ref = doc(db, paths.calendar("2026-julian"));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), wishes: { balance: "pages", text: "" } }));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), wishes: { balance: "bricks", text: "", extra: 1 } }));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), wishes: { balance: "bricks" } }));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), wishes: { balance: "bricks", text: 5 } }));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), wishes: { balance: "bricks", text: "x".repeat(1001) } }));
+    await assertFails(setDoc(ref, { ...newCalendar("amund"), childName: 7 }));
+  });
+
   it("denies creating a calendar with the wrong createdBy", async () => {
     const db = env.authenticatedContext("amund").firestore();
     await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), newCalendar("someone-else")));
@@ -173,6 +191,13 @@ describe("julekalender", () => {
     await assertSucceeds(
       updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "steps", text: "mer" }, childName: "Ida M." }),
     );
+  });
+
+  it("denies updating wishes to a bad shape", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "pages", text: "" } }));
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "steps", text: "", x: 1 } }));
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { "wishes.balance": "pages" }));
   });
 
   it("adults may only change wishes and childName", async () => {

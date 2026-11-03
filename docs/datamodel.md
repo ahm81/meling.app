@@ -33,7 +33,7 @@ Julekalenderen for ett barn og ett år. Id er `{år}-{barnets uid}` (`calendarId
 
 | Sti                                      | Les    | Skriv fra klient                                                                 |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
-| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` og `childName` |
+| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, id `{year}-{childUid}`, `year` heltall (minst 2024), `childUid` og `childName` string, gyldige `wishes`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` (samme form) og `childName` |
 | `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`, nøyaktig feltene i `ManualDoc` og id av `[A-Za-z0-9_-]` (Firestore auto-id). Oppdater: bare `order` (heltall, minst 1). Slett: aldri (bruk `deleteManual`) |
 | `julekalender/{calId}/pages/{manualId}_{side}` | voksne | aldri (bare functions)                                                     |
 | `julekalender/{calId}/versions/{nr}`     | voksne | aldri (bare functions). Id er versjonsnummeret med 6 sifre (`000001`)            |
