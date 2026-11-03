@@ -3,7 +3,15 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { DOOR_COUNT, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
 import { DayDetail } from "./DayDetail";
-import { REDRAFT_CONFIRM, buildSteps, callableError, dayRows, indexSteps, manualName } from "./plan-view";
+import {
+  REDRAFT_CONFIRM,
+  buildSteps,
+  callableError,
+  dayRows,
+  indexSteps,
+  manualName,
+  manualsChangedSincePlan,
+} from "./plan-view";
 import { useCalendar } from "./useCalendar";
 import { useCutouts } from "./useCutouts";
 import { usePages } from "./usePages";
@@ -23,7 +31,10 @@ export function PlanPage() {
   const versionNo = calendar?.currentVersion ?? null;
   // Only edit when the plan we show is the calendar's current version.
   const plan = currentVersion && currentVersion.number === versionNo ? currentVersion.plan : null;
-  const cutouts = useCutouts(calId, plan ? versionNo : null);
+  // A plan built from other manuals than the current ones refers to steps that may be gone,
+  // so it is shown read-only and without cutouts until a new draft is made.
+  const manualsChanged = plan !== null && manualsChangedSincePlan(plan, manuals);
+  const cutouts = useCutouts(calId, plan && !manualsChanged ? versionNo : null);
 
   const pageDocs = useMemo(() => pages.map((p) => p.page), [pages]);
   const steps = useMemo(() => buildSteps(pageDocs, manuals), [pageDocs, manuals]);
@@ -85,6 +96,7 @@ export function PlanPage() {
   if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   const draftRunning = calendar.draft === "running";
+  const allRead = manuals.length > 0 && manuals.every((m) => m.status === "done");
   const selected = rows[day - 1];
 
   return (
@@ -116,6 +128,17 @@ export function PlanPage() {
       {draftRunning && (
         <div className="banner run" role="status">
           <span>AI-en lager et nytt forslag …</span>
+        </div>
+      )}
+      {manualsChanged && !draftRunning && (
+        <div className="banner run" role="status">
+          <span>
+            Manualene er endret siden fordelingen ble laget. Lag et nytt utkast før du endrer fordelingen.
+            {!allRead && " Vent til AI-en har lest alle manualene."}
+          </span>
+          <button onClick={startRedraft} disabled={redrafting || busy || !allRead}>
+            {redrafting ? "Lager utkast …" : "Lag nytt utkast"}
+          </button>
         </div>
       )}
       {calendar.draft === "error" && versionNo !== null && (
@@ -187,7 +210,7 @@ export function PlanPage() {
                 pages={pageMap}
                 manuals={manuals}
                 cutouts={cutouts}
-                busy={busy || redrafting || draftRunning}
+                busy={busy || redrafting || draftRunning || manualsChanged}
                 onEdit={edit}
               />
             )}
