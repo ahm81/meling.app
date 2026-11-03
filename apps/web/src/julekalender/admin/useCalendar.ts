@@ -11,6 +11,7 @@ export interface CalendarState {
   manuals: Manual[];
   currentVersion: VersionDoc | null;
   loading: boolean;
+  error: string | null;
 }
 
 function parseOrNull<T>(schema: { parse(v: unknown): T }, data: unknown): T | null {
@@ -28,19 +29,28 @@ export function useCalendar(calId: string): CalendarState {
   const [calendarLoaded, setCalendarLoaded] = useState(false);
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [version, setVersion] = useState<VersionDoc | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const currentNumber = calendar?.currentVersion ?? null;
 
   useEffect(() => {
     setCalendar(null);
     setCalendarLoaded(false);
     setManuals([]);
+    setError(null);
+    const fail = (what: string) => (e: Error) => {
+      console.error(what, e);
+      setError(`Kunne ikke hente ${what}.`);
+    };
     const offCalendar = onSnapshot(
       doc(db, paths.calendar(calId)),
       (snap) => {
         setCalendar(snap.exists() ? parseOrNull(CalendarDoc, snap.data()) : null);
         setCalendarLoaded(true);
       },
-      () => setCalendarLoaded(true),
+      (e) => {
+        fail("kalenderen")(e);
+        setCalendarLoaded(true);
+      },
     );
     const offManuals = onSnapshot(
       query(collection(db, paths.calendar(calId), "manuals"), orderBy("order")),
@@ -51,6 +61,7 @@ export function useCalendar(calId: string): CalendarState {
             return m ? [{ ...m, id: d.id }] : [];
           }),
         ),
+      fail("manualene"),
     );
     return () => {
       offCalendar();
@@ -63,7 +74,10 @@ export function useCalendar(calId: string): CalendarState {
     if (currentNumber === null) return;
     return onSnapshot(doc(db, paths.version(calId, currentNumber)), (snap) =>
       setVersion(snap.exists() ? parseOrNull(VersionDoc, snap.data()) : null),
-    );
+    (e) => {
+      console.error("versjonen", e);
+      setError("Kunne ikke hente versjonen.");
+    });
   }, [calId, currentNumber]);
 
   return {
@@ -71,5 +85,6 @@ export function useCalendar(calId: string): CalendarState {
     manuals,
     currentVersion: currentNumber === null ? null : version,
     loading: !calendarLoaded,
+    error,
   };
 }

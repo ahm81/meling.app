@@ -42,8 +42,15 @@ export function manualSummary(manuals: Manual[]): string {
 }
 
 function CalendarCard({ calId }: { calId: string }) {
-  const { calendar, manuals } = useCalendar(calId);
-  if (!calendar) return null;
+  const { calendar, manuals, loading } = useCalendar(calId);
+  if (loading) return null;
+  if (!calendar)
+    return (
+      <article className="card">
+        <h2>Ugyldig kalender</h2>
+        <p>Dokumentet «{calId}» kunne ikke leses.</p>
+      </article>
+    );
   const base = `/julekalender/admin/${calId}`;
   const sets = manuals.map((m) => m.setNumber).filter((s): s is string => !!s);
   return (
@@ -88,6 +95,7 @@ export function Overview({ uid }: { uid: string }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [creating, setCreating] = useState(false);
   const [childUid, setChildUid] = useState("");
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -127,7 +135,8 @@ export function Overview({ uid }: { uid: string }) {
 
   async function create() {
     const child = children.find((c) => c.uid === childUid);
-    if (!child) return;
+    if (!child || busy) return;
+    setBusy(true);
     setMessage(null);
     const id = calendarId(year, child.uid);
     try {
@@ -153,6 +162,8 @@ export function Overview({ uid }: { uid: string }) {
     } catch (error) {
       console.error(error);
       setMessage("Kunne ikke opprette kalenderen. Prøv igjen.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -193,10 +204,10 @@ export function Overview({ uid }: { uid: string }) {
               </option>
             ))}
           </select>
-          <button className="primary" type="submit" disabled={!childUid}>
+          <button className="primary" type="submit" disabled={!childUid || busy}>
             Opprett for {year}
           </button>
-          <button type="button" onClick={() => setCreating(false)}>
+          <button type="button" disabled={busy} onClick={() => setCreating(false)}>
             Avbryt
           </button>
         </form>
