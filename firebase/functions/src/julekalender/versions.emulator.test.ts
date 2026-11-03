@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { toPageAnalysis } from "./analysis";
 import {
   type CallableDeps,
+  deleteManualHandler,
   editPlanHandler,
   redraftHandler,
   renderCutoutsHandler,
@@ -461,6 +462,87 @@ describe("callables", () => {
         code: "permission-denied",
       });
       expect((await db.doc(paths.page(calId, "m1", 20)).get()).exists).toBe(true);
+    });
+  });
+
+  describe("deleteManual", () => {
+    /** A finished manual m1 with its PDF, page images and a cutout, plus another manual m2 that stays. */
+    async function withFiles(calId: string, status: ManualDoc["status"] = "done", updatedAt = minutesAgo(1)) {
+      await seedAnalyzedManual(calId, 12);
+      await db.doc(paths.manual(calId, "m1")).update({ status, updatedAt });
+      await bucket.file(storagePaths.manualPdf(calId, "m1")).save(Buffer.from("%PDF"), { contentType: "application/pdf" });
+      await bucket.file(storagePaths.pageImage(calId, "m1", 2)).save(Buffer.from("x"));
+      await bucket.file(storagePaths.cutout(calId, "m1:2:0", "none")).save(Buffer.from("x"));
+      await db.doc(paths.manual(calId, "m2")).set({ order: 2, status: "error" }, { merge: true });
+      await db.doc(paths.page(calId, "m2", 1)).set({ manualId: "m2", page: 1 });
+      await bucket.file(storagePaths.pageImage(calId, "m2", 1)).save(Buffer.from("x"));
+      await bucket.file(storagePaths.cutout(calId, "m2:1:0", "none")).save(Buffer.from("x"));
+    }
+    const exists = async (path: string) => (await bucket.file(path).exists())[0];
+
+    it("deletes the manual, its pages, page images, cutouts and PDF, and nothing else", async () => {
+      const calId = await seedCalendar();
+      await withFiles(calId);
+      expect(await deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }))).toEqual({ ok: true });
+      expect((await db.doc(paths.manual(calId, "m1")).get()).exists).toBe(false);
+      expect((await db.collection(`${paths.calendar(calId)}/pages`).where("manualId", "==", "m1").get()).empty).toBe(true);
+      expect(await exists(storagePaths.manualPdf(calId, "m1"))).toBe(false);
+      expect(await exists(storagePaths.pageImage(calId, "m1", 2))).toBe(false);
+      expect(await exists(storagePaths.cutout(calId, "m1:2:0", "none"))).toBe(false);
+      // The other manual is untouched.
+      expect((await db.doc(paths.manual(calId, "m2")).get()).exists).toBe(true);
+      expect((await db.doc(paths.page(calId, "m2", 1)).get()).exists).toBe(true);
+      expect(await exists(storagePaths.pageImage(calId, "m2", 1))).toBe(true);
+      expect(await exists(storagePaths.cutout(calId, "m2:1:0", "none"))).toBe(true);
+    });
+
+    it("does not change the versions of a calendar that has a plan", async () => {
+      const calId = await drafted();
+      await deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }));
+      expect(await calendar(calId)).toMatchObject({ currentVersion: 1, draft: "done" });
+      expect(await versions(calId)).toHaveLength(1);
+    });
+
+    it("makes the first draft when the deleted manual was the one holding it back", async () => {
+      const calId = await seedCalendar();
+      await seedAnalyzedManual(calId, 12);
+      await db.doc(paths.manual(calId, "m2")).set({ order: 2, status: "error" }, { merge: true });
+      await deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m2" }));
+      expect(await calendar(calId)).toMatchObject({ draft: "done", currentVersion: 1 });
+    });
+
+    it("leaves the draft waiting when no manuals remain", async () => {
+      const calId = await seedCalendar();
+      await seedAnalyzedManual(calId, 12);
+      await deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }));
+      expect(await calendar(calId)).toMatchObject({ draft: "waiting", currentVersion: null });
+    });
+
+    it("refuses a manual that is being processed, unless it is stuck", async () => {
+      const calId = await seedCalendar();
+      await withFiles(calId, "analyzing", minutesAgo(2));
+      await expect(deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }))).rejects.toMatchObject({
+        code: "failed-precondition",
+      });
+      expect(await exists(storagePaths.manualPdf(calId, "m1"))).toBe(true);
+      await db.doc(paths.manual(calId, "m1")).update({ status: "rendering", updatedAt: minutesAgo(16) });
+      expect(await deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }))).toEqual({ ok: true });
+      expect((await db.doc(paths.manual(calId, "m1")).get()).exists).toBe(false);
+    });
+
+    it("is not-found for a missing manual and denied for children", async () => {
+      const calId = await seedCalendar();
+      await withFiles(calId);
+      await expect(deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "nope" }))).rejects.toMatchObject({
+        code: "not-found",
+      });
+      await expect(deleteManualHandler(deps(), as("ida", { calendarId: calId, manualId: "m1" }))).rejects.toMatchObject({
+        code: "permission-denied",
+      });
+      await expect(deleteManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1:2" }))).rejects.toMatchObject({
+        code: "invalid-argument",
+      });
+      expect((await db.doc(paths.manual(calId, "m1")).get()).exists).toBe(true);
     });
   });
 

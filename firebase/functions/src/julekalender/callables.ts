@@ -11,6 +11,7 @@ import {
   type PipelineDeps,
   computeDraft,
   draftErrorMessage,
+  draftIfAllManualsDone,
   forEachLimited,
   isDraftDomainError,
   loadSteps,
@@ -226,6 +227,52 @@ export async function retryManualHandler(deps: CallableDeps, request: CallReques
   return { ok: true };
 }
 
+// ---- deleteManual
+
+const DeleteManualInput = z.object({ calendarId: Id, manualId: Id });
+
+/**
+ * Removes a manual with its pages, page images, cutouts and PDF. Refused while the manual is being rendered
+ * or analysed, unless it has been stuck for more than 15 minutes. Versions are never changed: if the calendar
+ * has a plan, the adults make a new draft. If it is still waiting for its first draft and every remaining
+ * manual is done, the first draft is made, as when the last manual finishes.
+ */
+export async function deleteManualHandler({ db, bucket, ai }: CallableDeps, request: CallRequest): Promise<{ ok: true }> {
+  await requireAdult(db, request);
+  const { calendarId, manualId } = parseInput(DeleteManualInput, request.data);
+  const manualRef = db.doc(paths.manual(calendarId, manualId));
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(manualRef);
+    if (!snap.exists) throw new HttpsError("not-found", "Fant ikke manualen.");
+    if (isProcessing(snap.get("status")) && !isStale(updatedAtOf(snap))) {
+      throw new HttpsError("failed-precondition", "Manualen leses av AI-en nå. Vent til den er ferdig, eller prøv igjen om 15 minutter.");
+    }
+    // Deleted first, so a trigger that has not claimed it yet finds nothing to do.
+    tx.delete(manualRef);
+  });
+
+  const pages = await pagesOf(db, calendarId).where("manualId", "==", manualId).get();
+  const writer = db.bulkWriter();
+  for (const p of pages.docs) void writer.delete(p.ref);
+  await writer.close();
+  await Promise.all([
+    bucket.deleteFiles({ prefix: storagePaths.pagesDir(calendarId, manualId) }),
+    bucket.deleteFiles({ prefix: manualCutoutsPrefix(calendarId, manualId) }),
+    bucket.file(storagePaths.manualPdf(calendarId, manualId)).delete({ ignoreNotFound: true }),
+  ]);
+
+  const remaining = await manualsOf(db, calendarId).limit(1).get();
+  if (!remaining.empty) {
+    try {
+      await draftIfAllManualsDone(db, ai, calendarId);
+    } catch (e) {
+      logger.error("Could not start the first draft", { calId: calendarId, manualId, error: e });
+    }
+  }
+  return { ok: true };
+}
+
 // ---- renderCutouts
 
 const RenderCutoutsInput = z.object({ calendarId: Id, version: z.int().min(1) });
@@ -284,4 +331,5 @@ export const restoreVersion = onCall((request) => restoreVersionHandler(deps(), 
 export const redraft = onCall({ timeoutSeconds: 300 }, (request) => redraftHandler(deps(), request));
 // Same budget as the onManualCreated trigger, since it runs the same pipeline.
 export const retryManual = onCall({ timeoutSeconds: 540, memory: "2GiB" }, (request) => retryManualHandler(deps(), request));
+export const deleteManual = onCall({ timeoutSeconds: 300 }, (request) => deleteManualHandler(deps(), request));
 export const renderCutouts = onCall({ timeoutSeconds: 300, memory: "1GiB" }, (request) => renderCutoutsHandler(deps(), request));
