@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { paths } from "@meling/shared";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
@@ -73,5 +73,149 @@ describe("members", () => {
   it("denies a member changing their own role", async () => {
     const db = env.authenticatedContext("ida").firestore();
     await assertFails(updateDoc(doc(db, paths.member("ida")), { role: "adult" }));
+  });
+});
+
+describe("julekalender", () => {
+  const newCalendar = (createdBy: string) => ({
+    year: 2026,
+    childUid: "julian",
+    childName: "Julian",
+    wishes: { balance: "bricks", text: "" },
+    currentVersion: null,
+    draft: "waiting",
+    draftError: null,
+    createdBy,
+  });
+  const newManual = (status: string) => ({
+    order: 1,
+    fileName: "set.pdf",
+    storagePath: "julekalender/2026-ida/manuals/m1.pdf",
+    status,
+    pageCount: null,
+    pagesAnalyzed: 0,
+    setNumber: null,
+    error: null,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, paths.calendar("2026-ida")), { ...newCalendar("amund"), childUid: "ida", childName: "Ida" });
+      await setDoc(doc(db, paths.manual("2026-ida", "m1")), newManual("uploaded"));
+      await setDoc(doc(db, paths.page("2026-ida", "m1", 1)), { manualId: "m1", page: 1 });
+      await setDoc(doc(db, paths.version("2026-ida", 1)), { n: 1 });
+    });
+  });
+
+  it("adults read calendars", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(getDoc(doc(db, paths.calendar("2026-ida"))));
+    await assertSucceeds(getDoc(doc(db, paths.manual("2026-ida", "m1"))));
+    await assertSucceeds(getDoc(doc(db, paths.page("2026-ida", "m1", 1))));
+    await assertSucceeds(getDoc(doc(db, paths.version("2026-ida", 1))));
+  });
+
+  it("children cannot read calendars", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(getDoc(doc(db, paths.calendar("2026-ida"))));
+    await assertFails(getDoc(doc(db, paths.manual("2026-ida", "m1"))));
+    await assertFails(getDoc(doc(db, paths.version("2026-ida", 1))));
+  });
+
+  it("non-members cannot read calendars", async () => {
+    const db = env.authenticatedContext("stranger").firestore();
+    await assertFails(getDoc(doc(db, paths.calendar("2026-ida"))));
+  });
+
+  it("adults create a calendar in waiting state", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(setDoc(doc(db, paths.calendar("2026-julian")), newCalendar("amund")));
+  });
+
+  it("denies creating a calendar with an extra key", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), { ...newCalendar("amund"), extra: 1 }));
+  });
+
+  it("denies creating a calendar with a missing key", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    const { draftError: _omit, ...rest } = newCalendar("amund");
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), rest));
+  });
+
+  it("denies creating a calendar with the wrong createdBy", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), newCalendar("someone-else")));
+  });
+
+  it("denies creating a calendar with a non-null currentVersion", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), { ...newCalendar("amund"), currentVersion: 3 }));
+  });
+
+  it("denies creating a calendar that is not waiting", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.calendar("2026-julian")), { ...newCalendar("amund"), draft: "done" }));
+  });
+
+  it("denies children and non-members creating calendars", async () => {
+    await assertFails(
+      setDoc(doc(env.authenticatedContext("ida").firestore(), paths.calendar("2026-julian")), newCalendar("ida")),
+    );
+    await assertFails(
+      setDoc(doc(env.authenticatedContext("stranger").firestore(), paths.calendar("2026-julian")), newCalendar("stranger")),
+    );
+  });
+
+  it("adults may change wishes and childName", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "steps", text: "mer" }, childName: "Ida M." }),
+    );
+  });
+
+  it("adults may only change wishes and childName", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { currentVersion: 5 }));
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { draft: "done" }));
+  });
+
+  it("children cannot update calendars", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { childName: "X" }));
+  });
+
+  it("nobody deletes calendars", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(deleteDoc(doc(db, paths.calendar("2026-ida"))));
+  });
+
+  it("adults cannot write versions", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.version("2026-ida", 1)), { n: 2 }));
+    await assertFails(setDoc(doc(db, paths.version("2026-ida", 2)), { n: 2 }));
+  });
+
+  it("adults cannot write pages", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.page("2026-ida", "m1", 2)), { manualId: "m1", page: 2 }));
+  });
+
+  it("adults create manuals only as uploaded", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("done")));
+    await assertSucceeds(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded")));
+  });
+
+  it("children cannot create manuals", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(setDoc(doc(db, paths.manual("2026-ida", "m2")), newManual("uploaded")));
+  });
+
+  it("denies updating and deleting manuals from clients", async () => {
+    const db = env.authenticatedContext("amund").firestore();
+    await assertFails(updateDoc(doc(db, paths.manual("2026-ida", "m1")), { status: "done" }));
+    await assertFails(deleteDoc(doc(db, paths.manual("2026-ida", "m1"))));
   });
 });

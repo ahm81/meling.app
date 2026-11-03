@@ -24,6 +24,39 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // New services (e.g. christmasCalendar) get their own match block using isMember().
+    // Julekalender: only adults. Versions and pages are written by functions (admin SDK) only.
+    match /julekalender/{calId} {
+      allow read: if isAdult();
+      allow create: if isAdult()
+        && request.resource.data.keys().hasOnly(
+          ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
+        && request.resource.data.keys().hasAll(
+          ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.currentVersion == null
+        && request.resource.data.draft == 'waiting'
+        && request.resource.data.draftError == null;
+      allow update: if isAdult()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wishes', 'childName']);
+      allow delete: if false;
+
+      match /manuals/{manualId} {
+        allow read: if isAdult();
+        allow create: if isAdult() && request.resource.data.status == 'uploaded';
+        allow update, delete: if false;
+      }
+
+      match /pages/{pageId} {
+        allow read: if isAdult();
+        allow write: if false;
+      }
+
+      match /versions/{versionId} {
+        allow read: if isAdult();
+        allow write: if false;
+      }
+    }
+
+    // New services get their own match block using isMember().
   }
 }

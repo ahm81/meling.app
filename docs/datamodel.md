@@ -26,9 +26,24 @@ Familiemedlemmene. Legges til med `pnpm add-member`, aldri fra klientene.
 Hver tjeneste (for eksempel en julekalender) får sin egen samling på toppnivå og sin egen
 `match`-blokk i `firestore.rules` som bruker `isMember()`. Alt som ikke er eksplisitt tillatt, er stengt.
 
+### `julekalender/{calId}`
+
+Bare voksne (`role == "adult"`) har tilgang. Klienter kan aldri slette.
+
+| Sti                                      | Les    | Skriv fra klient                                                                 |
+| ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
+| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` og `childName` |
+| `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`; ellers aldri                                 |
+| `julekalender/{calId}/pages/{id}`        | voksne | aldri (bare functions)                                                           |
+| `julekalender/{calId}/versions/{id}`     | voksne | aldri (bare functions)                                                           |
+
 ## Storage
 
-Alt er lesbart og skrivbart for medlemmer, og stengt for alle andre.
+Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for alle andre.
+
+- `julekalender/{calId}/manuals/{fil}`: voksne leser og skriver, bare `application/pdf` under 50 MB.
+- `julekalender/{calId}/**` ellers: voksne leser, ingen skriver fra klient (bare functions).
+- Storage-regler kan ikke kalle `isAdult()`; de leser `members/{uid}.role` via `firestore.get(...)`.
 
 ## Legge til et familiemedlem
 
