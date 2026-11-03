@@ -6,6 +6,7 @@ packages:
   - firebase/admin
 allowBuilds:
   '@firebase/util': true
+  '@google/genai': false
   esbuild: true
   protobufjs: true
   # Optional native regex engine for firebase-tools; not needed.
