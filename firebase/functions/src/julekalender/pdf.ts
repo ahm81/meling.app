@@ -1,4 +1,9 @@
-import * as mupdf from "mupdf";
+// Type-only at the top: mupdf's entry uses top-level await (WASM), and the Functions emulator and runtime
+// load lib/index.js with require(), which fails on any ESM graph with top-level await. It is loaded on first use.
+import type * as Mupdf from "mupdf";
+
+let mupdfModule: Promise<typeof Mupdf> | undefined;
+const loadMupdf = () => (mupdfModule ??= import("mupdf"));
 
 export class PdfReadError extends Error {
   constructor(cause?: unknown) {
@@ -15,7 +20,8 @@ export async function* renderPdf(
   pdf: Buffer,
   scale = 2,
 ): AsyncGenerator<{ page: number; png: Buffer; width: number; height: number }> {
-  let doc: mupdf.Document;
+  const mupdf = await loadMupdf();
+  let doc: Mupdf.Document;
   let count: number;
   try {
     doc = mupdf.Document.openDocument(pdf, "application/pdf");
@@ -27,8 +33,8 @@ export async function* renderPdf(
     if (count < 1) throw new PdfReadError();
     for (let i = 0; i < count; i++) {
       let rendered: { png: Buffer; width: number; height: number };
-      let page: mupdf.Page | undefined;
-      let pixmap: mupdf.Pixmap | undefined;
+      let page: Mupdf.Page | undefined;
+      let pixmap: Mupdf.Pixmap | undefined;
       try {
         page = doc.loadPage(i);
         pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false, true);

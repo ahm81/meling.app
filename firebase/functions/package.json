@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "check:load": "node -e \"require('./lib/index.js')\"",
     "dev": "tsup --watch",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
