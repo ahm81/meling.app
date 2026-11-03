@@ -36,7 +36,7 @@ pnpm typecheck && pnpm test
 pnpm test:rules           # Firestore-regeltester mot emulatoren
 pnpm test:functions       # functions-tester mot emulatoren (prosjekt demo-meling)
 pnpm --filter @meling/functions check:load   # functions må la seg laste med require (også i CI)
-pnpm add-member --email <e-post> --name <navn> [--emulator]
+pnpm add-member --email <e-post> --name <navn> --role adult|child [--emulator]
 cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test
 ```
