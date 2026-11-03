@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Step } from "@meling/shared";
-import { TooFewStepsError, distribute, type Constraint } from "./distribute";
+import { TooFewBrickStepsError, TooFewStepsError, distribute, type Constraint } from "./distribute";
 
 // Step n (1-based) gets its own page unless `page` says otherwise.
 const makeSteps = (bricks: number[], page: (n: number) => number = (n) => n): Step[] =>
@@ -41,10 +41,18 @@ describe("distribute", () => {
     expect(days.flatMap((d) => d.stepIds)).toEqual(steps.map((s) => s.id));
   });
 
-  it("never makes a zero-weight day, even when no other split exists", () => {
-    // Exactly 24 steps with one empty step: the only split would leave that day with no bricks.
+  it("never makes a zero-weight day", () => {
+    // 25 steps, 24 with bricks: the empty step must share a day; it can never stand alone.
+    const steps = makeSteps(Array.from({ length: 25 }, (_, i) => (i + 1 === 7 ? 0 : 1)));
+    const days = run(steps);
+    expect(days.find((d) => d.stepIds.includes("s7"))!.stepIds.length).toBe(2);
+  });
+
+  it("throws TooFewBrickStepsError when fewer than 24 steps have bricks", () => {
+    // Exactly 24 steps with one empty step: a bricks split would leave a day with no bricks.
     const steps = makeSteps(Array.from({ length: 24 }, (_, i) => (i + 1 === 7 ? 0 : 1)));
-    expect(() => run(steps)).toThrow("Ønskene kan ikke oppfylles samtidig.");
+    expect(() => run(steps)).toThrow(TooFewBrickStepsError);
+    expect(() => run(steps)).toThrow("Bare 23 byggetrinn har brikker. Det trengs minst 24.");
     expect(run(steps, [], "steps")).toHaveLength(24);
   });
 
@@ -86,6 +94,18 @@ describe("distribute", () => {
       { kind: "stepOnDay", stepId: "s20", day: 10 },
     ];
     expect(() => run(steps, constraints)).toThrow("Ønskene kan ikke oppfylles samtidig.");
+  });
+
+  it("throws on an unknown step id in a constraint", () => {
+    const steps = makeSteps(Array(48).fill(3));
+    expect(() => run(steps, [{ kind: "stepLast", stepId: "nope" }])).toThrow("Ukjent trinn i ønskene: nope");
+  });
+
+  it("rejects stepOnDay outside 1–24", () => {
+    const steps = makeSteps(Array(48).fill(3));
+    for (const day of [0, 25, 1.5]) {
+      expect(() => run(steps, [{ kind: "stepOnDay", stepId: "s1", day }])).toThrow("Ønskene kan ikke oppfylles samtidig.");
+    }
   });
 
   it("throws TooFewStepsError below 24 steps", () => {

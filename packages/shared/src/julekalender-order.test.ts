@@ -45,6 +45,18 @@ describe("orderSteps", () => {
     expect(steps.map((s) => s.printedNumber)).toEqual([7, 8]);
   });
 
+  it("breaks ties on equal manualOrder and page by manualId", () => {
+    const one = (manualId: string) => ({
+      manualId,
+      manualOrder: 1,
+      page: 1,
+      analysis: page([{ printedNumber: 1, bbox: box(0.05), parts: [] }]),
+    });
+    const ids = (pages: ReturnType<typeof one>[]) => orderSteps(pages).map((s) => s.id);
+    expect(ids([one("mb"), one("ma")])).toEqual(["ma:1:0", "mb:1:0"]);
+    expect(ids([one("ma"), one("mb")])).toEqual(["ma:1:0", "mb:1:0"]);
+  });
+
   it("counts bricks and allows steps without parts", () => {
     const steps = orderSteps([
       {

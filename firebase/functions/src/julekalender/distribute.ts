@@ -7,6 +7,14 @@ export class TooFewStepsError extends Error {
   }
 }
 
+// Balancing on bricks forbids days without bricks, so at least DOOR_COUNT steps must have some.
+export class TooFewBrickStepsError extends Error {
+  constructor(n: number) {
+    super(`Bare ${n} byggetrinn har brikker. Det trengs minst ${DOOR_COUNT}.`);
+    this.name = "TooFewBrickStepsError";
+  }
+}
+
 /**
  * stepOnDay: the step lands on the given day (1–24).
  * stepLast: the step is the last step of whichever day it lands on (a day ends right after it).
@@ -29,6 +37,10 @@ export function distribute(
   const n = steps.length;
   const D = DOOR_COUNT;
   if (n < D) throw new TooFewStepsError(n);
+  if (opts.balance === "bricks") {
+    const withBricks = steps.filter((s) => s.brickCount > 0).length;
+    if (withBricks < D) throw new TooFewBrickStepsError(withBricks);
+  }
 
   // prefix[j] = total weight of steps[0..j)
   const prefix = new Float64Array(n + 1);

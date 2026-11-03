@@ -11,7 +11,8 @@ const readingOrder = (a: StepBox, b: StepBox): number => {
 };
 
 /**
- * Global build order: by manualOrder, then page, then reading order on the page.
+ * Global build order: by manualOrder, then page, then reading order on the page
+ * (manualId breaks ties between manuals with the same order, so the result is deterministic).
  * The printed step number is kept for display only; it restarts in each manual and is
  * sometimes misread, so it never decides the order.
  */
@@ -19,7 +20,7 @@ export function orderSteps(
   pages: { manualId: string; manualOrder: number; page: number; analysis: PageAnalysis }[],
 ): Step[] {
   return [...pages]
-    .sort((a, b) => a.manualOrder - b.manualOrder || a.page - b.page)
+    .sort((a, b) => a.manualOrder - b.manualOrder || a.page - b.page || a.manualId.localeCompare(b.manualId))
     .flatMap(({ manualId, manualOrder, page, analysis }) =>
       [...analysis.steps].sort(readingOrder).map((s, index) => ({
         id: stepId(manualId, page, index),
