@@ -442,22 +442,28 @@ button:disabled {
 }
 
 .plan-layout {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
-  align-items: flex-start;
+  align-items: start;
 }
 
 .day-list {
-  flex: 1 1 20rem;
   min-width: 0;
   padding: 0;
   gap: 0;
-  overflow: auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: 50vh;
 }
 
-@media (min-width: 60rem) {
+/* Side by side only when both fit; below this the day list sits above the detail. */
+@media (min-width: 900px) {
+  .plan-layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  }
+
   .day-list {
     position: sticky;
     top: 1rem;
@@ -466,16 +472,17 @@ button:disabled {
 }
 
 .plan-detail {
-  flex: 999 1 32rem;
   min-width: 0;
   display: grid;
   gap: 1.25rem;
 }
 
 .day-row {
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr) 4rem;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 3.5rem;
   gap: 0.5rem;
   align-items: center;
   min-height: 44px;
@@ -504,6 +511,11 @@ button:disabled {
 
 .day-row .num {
   text-align: right;
+  white-space: nowrap;
+}
+
+.day-row > * {
+  min-width: 0;
 }
 
 .day-steps {
@@ -764,5 +776,12 @@ details summary {
 
   .bag {
     border-color: #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .swatch {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { DOOR_COUNT, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
@@ -20,6 +20,8 @@ export function PlanPage() {
   const [busy, setBusy] = useState(false);
   const [editError, setEditError] = useState<{ message: string; stale: boolean } | null>(null);
   const [redrafting, setRedrafting] = useState(false);
+  // Guards against double submits before React re-renders with busy = true.
+  const inFlight = useRef(false);
 
   const versionNo = calendar?.currentVersion ?? null;
   // Only edit when the plan we show is the calendar's current version.
@@ -51,7 +53,8 @@ export function PlanPage() {
   const selectDay = (d: number) => setSearch({ dag: String(d) }, { replace: true });
 
   async function edit(ops: PlanOp[], summary: string): Promise<boolean> {
-    if (!calendar || versionNo === null || busy) return false;
+    if (!calendar || versionNo === null || inFlight.current) return false;
+    inFlight.current = true;
     setBusy(true);
     setEditError(null);
     try {
@@ -62,6 +65,7 @@ export function PlanPage() {
       setEditError(callableError(e));
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -75,7 +79,7 @@ export function PlanPage() {
     redraft({ calendarId: calId, baseVersion: calendar.currentVersion })
       .catch((e) => {
         console.error("redraft", e);
-        setEditError(callableError(e));
+        setEditError({ ...callableError(e), stale: false });
       })
       .finally(() => setRedrafting(false));
   }
@@ -176,6 +180,7 @@ export function PlanPage() {
           <div className="plan-detail">
             {selected && (
               <DayDetail
+                key={day}
                 calId={calId}
                 plan={plan}
                 row={selected}
@@ -184,7 +189,7 @@ export function PlanPage() {
                 pages={pageMap}
                 manuals={manuals}
                 cutouts={cutouts}
-                busy={busy || draftRunning}
+                busy={busy || redrafting || draftRunning}
                 onEdit={edit}
               />
             )}
