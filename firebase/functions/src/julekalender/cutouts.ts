@@ -30,6 +30,8 @@ export function maskFor(step: Step, hidden: Hidden[]): Bbox[] {
 export function maskKey(masks: Bbox[]): string {
   if (masks.length === 0) return "none";
   const r = (n: number) => Math.round(n * 1000) / 1000;
-  const canon = JSON.stringify(masks.map((m) => [r(m.x), r(m.y), r(m.w), r(m.h)]));
+  // Sorted so the same set of masks gives the same key in any order.
+  const tuples = masks.map((m) => [r(m.x), r(m.y), r(m.w), r(m.h)]).sort((a, b) => a.join(",").localeCompare(b.join(",")));
+  const canon = JSON.stringify(tuples);
   return createHash("sha256").update(canon).digest("hex").slice(0, 12);
 }

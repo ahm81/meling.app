@@ -89,4 +89,40 @@ describe("applyOps", () => {
     expect(() => applyOps(withHidden, steps, [{ type: "hide", hidden }])).toThrow(InvalidOpError);
     expect(() => applyOps(plan, steps, [{ type: "show", hiddenId: "nope" }])).toThrow(InvalidOpError);
   });
+
+  it("rejects moves outside days 1–24", () => {
+    const { plan, steps } = makePlan();
+    plan.days[0] = { stepIds: ["x1", "f1"] };
+    plan.days[23] = { stepIds: ["f24", "x24"] };
+    const all = [...steps, step("x1"), step("x24")];
+    expect(() => applyOps(plan, all, [{ type: "moveStep", stepId: "x1", toDay: 0 }])).toThrow(InvalidOpError);
+    expect(() => applyOps(plan, all, [{ type: "moveStep", stepId: "x24", toDay: 25 }])).toThrow(InvalidOpError);
+  });
+
+  it("throws on a batch with an invalid op after a valid one, leaving the input unchanged", () => {
+    const { plan, steps } = makePlan();
+    const copy = structuredClone(plan);
+    expect(() =>
+      applyOps(plan, steps, [
+        { type: "moveStep", stepId: "c", toDay: 6 },
+        { type: "moveStep", stepId: "a", toDay: 6 },
+      ]),
+    ).toThrow(InvalidOpError);
+    expect(plan).toEqual(copy);
+  });
+
+  it("rejects a step in the plan that is missing from steps", () => {
+    const { plan, steps } = makePlan();
+    expect(() =>
+      applyOps(plan, steps.filter((s) => s.id !== "c"), [{ type: "moveStep", stepId: "c", toDay: 6 }]),
+    ).toThrow(InvalidOpError);
+  });
+
+  it("stores a copy of the hidden region", () => {
+    const { plan, steps } = makePlan();
+    const h = structuredClone(hidden);
+    const out = applyOps(plan, steps, [{ type: "hide", hidden: h }]);
+    h.label = "endret";
+    expect(out.hidden[0]!.label).toBe("Forside");
+  });
 });

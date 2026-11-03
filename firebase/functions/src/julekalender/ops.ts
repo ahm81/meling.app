@@ -22,6 +22,7 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
       const from = days.findIndex((d) => d.stepIds.includes(op.stepId));
       if (from < 0 || !known.has(op.stepId)) throw new InvalidOpError(`Fant ikke trinnet ${op.stepId}.`);
       const to = op.toDay - 1;
+      if (to < 0 || to >= days.length) throw new InvalidOpError("Dagen finnes ikke.");
       if (Math.abs(to - from) !== 1) throw new InvalidOpError("Et trinn kan bare flyttes til dagen før eller etter.");
       const src = days[from]!.stepIds;
       const isFirst = src[0] === op.stepId;
@@ -37,7 +38,7 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
       else days[to]!.stepIds.unshift(op.stepId);
     } else if (op.type === "hide") {
       if (hidden.some((h) => h.id === op.hidden.id)) throw new InvalidOpError("Området er allerede skjult.");
-      hidden = [...hidden, op.hidden];
+      hidden = [...hidden, structuredClone(op.hidden)];
     } else {
       if (!hidden.some((h) => h.id === op.hiddenId)) throw new InvalidOpError("Fant ikke det skjulte området.");
       hidden = hidden.filter((h) => h.id !== op.hiddenId);

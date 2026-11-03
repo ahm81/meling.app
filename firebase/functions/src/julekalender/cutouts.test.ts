@@ -58,4 +58,10 @@ describe("maskKey", () => {
     expect(maskKey([{ x: 0.1004, y: 0.2, w: 0.3, h: 0.4 }])).toBe(a);
     expect(maskKey([{ x: 0.2, y: 0.2, w: 0.3, h: 0.4 }])).not.toBe(a);
   });
+
+  it("is independent of mask order", () => {
+    const a = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 };
+    const b = { x: 0.5, y: 0.1, w: 0.2, h: 0.2 };
+    expect(maskKey([a, b])).toBe(maskKey([b, a]));
+  });
 });
