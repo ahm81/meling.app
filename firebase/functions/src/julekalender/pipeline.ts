@@ -79,7 +79,9 @@ export async function processManual({ db, bucket, ai }: PipelineDeps, calId: str
 
 /**
  * The work of processManual once this run owns the manual (status "rendering"): also used by retryManual,
- * which claims the manual itself. Never throws for pipeline failures.
+ * which claims the manual itself. Resumable: pages that already have an analysis keep it, and page images
+ * that already exist are not uploaded again; only the missing pages are analysed. Page documents and images
+ * for pages the PDF no longer has are deleted. Never throws for pipeline failures.
  */
 export async function processClaimedManual({ db, bucket, ai }: PipelineDeps, calId: string, manualId: string): Promise<void> {
   const manualRef = db.doc(paths.manual(calId, manualId));
@@ -93,19 +95,47 @@ export async function processClaimedManual({ db, bucket, ai }: PipelineDeps, cal
       throw new UserFacingError("Fant ikke PDF-filen. Last opp manualen på nytt.", e);
     }
 
-    const rendered: { page: number; png: Buffer }[] = [];
+    // What an earlier run left: a page document is written after its image, so a document means an image.
+    const [manualSnap, existing] = await Promise.all([
+      manualRef.get(),
+      pagesOf(db, calId).where("manualId", "==", manualId).get(),
+    ]);
+    const earlierSetNumber = (manualSnap.get("setNumber") as string | null | undefined) ?? null;
+    const stored = new Map<number, { analysed: boolean }>();
+    for (const d of existing.docs) {
+      const p = PageDoc.safeParse(d.data());
+      if (p.success) stored.set(p.data.page, { analysed: p.data.analysis !== null });
+    }
+
+    const todo: { page: number; png: Buffer }[] = [];
+    let pageCount = 0;
+    let analysed = 0;
     for await (const { page, png, width, height } of renderPdf(pdf)) {
+      pageCount = page;
+      const earlier = stored.get(page);
+      if (earlier?.analysed) {
+        analysed++;
+        continue;
+      }
       const imagePath = storagePaths.pageImage(calId, manualId, page);
-      await bucket.file(imagePath).save(png, { contentType: "image/png", resumable: false });
+      const [hasImage] = earlier ? await bucket.file(imagePath).exists() : [false];
+      if (!hasImage) await bucket.file(imagePath).save(png, { contentType: "image/png", resumable: false });
       const doc: PageDoc = { manualId, page, imagePath, width, height, analysis: null };
       await db.doc(paths.page(calId, manualId, page)).set(doc);
-      rendered.push({ page, png });
+      todo.push({ page, png });
     }
-    await manualRef.update({ pageCount: rendered.length, status: "analyzing", updatedAt: now() });
+    const gone = [...stored.keys()].filter((page) => page > pageCount);
+    await Promise.all(
+      gone.flatMap((page) => [
+        db.doc(paths.page(calId, manualId, page)).delete(),
+        bucket.file(storagePaths.pageImage(calId, manualId, page)).delete({ ignoreNotFound: true }),
+      ]),
+    );
+    await manualRef.update({ pageCount, pagesAnalyzed: analysed, status: "analyzing", updatedAt: now() });
 
     stage = "analyzing";
     const setNumbers = new Map<number, string>();
-    await forEachLimited(rendered, MAX_CONCURRENT_ANALYSES, async ({ page, png }) => {
+    await forEachLimited(todo, MAX_CONCURRENT_ANALYSES, async ({ page, png }) => {
       const raw = await ai.analyzePage(png, page);
       let parsed: { analysis: PageAnalysis; setNumber: string | null };
       try {
@@ -122,7 +152,8 @@ export async function processClaimedManual({ db, bucket, ai }: PipelineDeps, cal
     await manualRef.update({
       status: "done",
       updatedAt: now(),
-      setNumber: firstWithSetNumber === undefined ? null : setNumbers.get(firstWithSetNumber)!,
+      // Pages kept from an earlier run are not read again, so their set number is the one stored then.
+      setNumber: firstWithSetNumber === undefined ? earlierSetNumber : setNumbers.get(firstWithSetNumber)!,
     });
   } catch (e) {
     logger.error("Manual pipeline failed", { calId, manualId, stage, error: e });

@@ -379,7 +379,7 @@ describe("callables", () => {
       await bucket.file(storagePaths.cutout(calId, "m1:20:0", "none")).save(Buffer.from("x"));
     }
 
-    it("reruns a failed manual from scratch", async () => {
+    it("reruns a failed manual and drops pages that no longer exist", async () => {
       const calId = await seedCalendar();
       await failedManual(calId, "error", minutesAgo(1));
       expect(await retryManualHandler(deps(), as("amund", { calendarId: calId, manualId: "m1" }))).toEqual({ ok: true });
@@ -388,6 +388,43 @@ describe("callables", () => {
       expect(manual.updatedAt).toBeInstanceOf(Timestamp);
       expect((await db.doc(paths.page(calId, "m1", 20)).get()).exists).toBe(false);
       expect((await bucket.file(storagePaths.pageImage(calId, "m1", 20)).exists())[0]).toBe(false);
+      expect((await bucket.file(storagePaths.cutout(calId, "m1:20:0", "none")).exists())[0]).toBe(false);
+      expect(await calendar(calId)).toMatchObject({ draft: "done", currentVersion: 1 });
+    });
+
+    it("resumes: keeps analysed pages and their images, analyses only the missing pages", async () => {
+      const calId = await seedCalendar();
+      await failedManual(calId, "error", minutesAgo(1));
+      await db.doc(paths.manual(calId, "m1")).update({ setNumber: "75192" });
+      const base = fakeAi({});
+      // Pages 1–5 were analysed and stored in the failed run; page 6 has an image and a doc without analysis.
+      const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: "#ffffff" } }).png().toBuffer();
+      const generations = new Map<number, string>();
+      for (let page = 1; page <= 6; page++) {
+        const imagePath = storagePaths.pageImage(calId, "m1", page);
+        await bucket.file(imagePath).save(image, { contentType: "image/png" });
+        generations.set(page, String((await bucket.file(imagePath).getMetadata())[0].generation));
+        const analysis = page <= 5 ? toPageAnalysis(await base.analyzePage(Buffer.alloc(0), page)).analysis : null;
+        const doc: PageDoc = { manualId: "m1", page, imagePath, width: 4, height: 4, analysis };
+        await db.doc(paths.page(calId, "m1", page)).set(doc);
+      }
+      const analysed: number[] = [];
+      const ai = { ...base, analyzePage: (png: Buffer, page: number) => (analysed.push(page), base.analyzePage(png, page)) };
+
+      expect(await retryManualHandler({ db, bucket, ai }, as("amund", { calendarId: calId, manualId: "m1" }))).toEqual({ ok: true });
+
+      expect(analysed.sort((a, b) => a - b)).toEqual([6, 7, 8, 9, 10, 11, 12, 13]);
+      const manual = (await db.doc(paths.manual(calId, "m1")).get()).data()!;
+      // The cover (page 1) was kept, so its set number stays.
+      expect(manual).toMatchObject({ status: "done", pageCount: 13, pagesAnalyzed: 13, setNumber: "75192", error: null });
+      for (let page = 1; page <= 6; page++) {
+        const [meta] = await bucket.file(storagePaths.pageImage(calId, "m1", page)).getMetadata();
+        expect(String(meta.generation)).toBe(generations.get(page));
+      }
+      const page3 = (await db.doc(paths.page(calId, "m1", 3)).get()).data() as PageDoc;
+      expect(page3.width).toBe(4); // kept as it was
+      expect((await db.doc(paths.page(calId, "m1", 13)).get()).get("analysis")).not.toBeNull();
+      expect((await bucket.file(storagePaths.pageImage(calId, "m1", 13)).exists())[0]).toBe(true);
       expect((await bucket.file(storagePaths.cutout(calId, "m1:20:0", "none")).exists())[0]).toBe(false);
       expect(await calendar(calId)).toMatchObject({ draft: "done", currentVersion: 1 });
     });

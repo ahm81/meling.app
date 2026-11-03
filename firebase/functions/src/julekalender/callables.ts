@@ -1,5 +1,5 @@
 import { CalendarDoc, type Hidden, Plan, PlanOp, type Step, paths, storagePaths } from "@meling/shared";
-import { FieldValue, type Firestore, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { type DocumentSnapshot, FieldValue, type Firestore, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -71,6 +71,16 @@ async function readPlan(db: Firestore, calId: string, n: number): Promise<Plan> 
 }
 
 const isStale = (at: Date | undefined) => at === undefined || Date.now() - at.getTime() > STALE_MS;
+const isProcessing = (status: unknown) => status === "rendering" || status === "analyzing";
+
+/** When a manual last moved: its updatedAt, or the document's update time if it has none. */
+function updatedAtOf(snap: DocumentSnapshot): Date | undefined {
+  const updatedAt = snap.get("updatedAt");
+  return updatedAt instanceof Timestamp ? updatedAt.toDate() : snap.updateTime?.toDate();
+}
+
+// Step ids start with the manual id: `${manualId}:${page}:${index}`.
+const manualCutoutsPrefix = (calId: string, manualId: string) => `${storagePaths.cutoutsDir(calId)}${manualId}:`;
 
 // ---- editPlan
 
@@ -186,8 +196,9 @@ const RetryManualInput = z.object({ calendarId: Id, manualId: Id });
 
 /**
  * Processes a manual again from its PDF: allowed when it failed, or has been stuck in "rendering" or
- * "analyzing" for more than 15 minutes. Claims the manual (status "rendering", progress reset) in a
- * transaction, deletes its pages, page images and cutouts, then runs the pipeline in this call.
+ * "analyzing" for more than 15 minutes. Claims the manual (status "rendering") in a transaction, deletes
+ * its cutouts (they depend on the analysis), then resumes the pipeline in this call: pages that were
+ * analysed keep their analysis and image, and only the missing pages are rendered and analysed again.
  * Pipeline failures end in status "error" as usual, so the call itself still returns ok.
  */
 export async function retryManualHandler(deps: CallableDeps, request: CallRequest): Promise<{ ok: true }> {
@@ -200,36 +211,17 @@ export async function retryManualHandler(deps: CallableDeps, request: CallReques
     const snap = await tx.get(manualRef);
     if (!snap.exists) throw new HttpsError("not-found", "Fant ikke manualen.");
     const status = snap.get("status") as string;
-    const updatedAt = snap.get("updatedAt");
-    const stuck =
-      (status === "rendering" || status === "analyzing") &&
-      isStale(updatedAt instanceof Timestamp ? updatedAt.toDate() : snap.updateTime?.toDate());
-    if (status !== "error" && !stuck) {
+    if (status !== "error" && !(isProcessing(status) && isStale(updatedAtOf(snap)))) {
       throw new HttpsError(
         "failed-precondition",
         "Manualen kan bare prøves på nytt når den har feilet eller har stått fast i mer enn 15 minutter.",
       );
     }
-    tx.update(manualRef, {
-      status: "rendering",
-      pageCount: null,
-      pagesAnalyzed: 0,
-      setNumber: null,
-      error: null,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    // pageCount and pagesAnalyzed are set again from what exists once the pages are rendered.
+    tx.update(manualRef, { status: "rendering", pageCount: null, pagesAnalyzed: 0, error: null, updatedAt: FieldValue.serverTimestamp() });
   });
 
-  const pages = await pagesOf(db, calendarId).where("manualId", "==", manualId).get();
-  const writer = db.bulkWriter();
-  for (const p of pages.docs) void writer.delete(p.ref);
-  await writer.close();
-  await Promise.all([
-    bucket.deleteFiles({ prefix: storagePaths.pagesDir(calendarId, manualId) }),
-    // Step ids start with the manual id: `${manualId}:${page}:${index}`.
-    bucket.deleteFiles({ prefix: `${storagePaths.cutoutsDir(calendarId)}${manualId}:` }),
-  ]);
-
+  await bucket.deleteFiles({ prefix: manualCutoutsPrefix(calendarId, manualId) });
   await processClaimedManual(deps, calendarId, manualId);
   return { ok: true };
 }
