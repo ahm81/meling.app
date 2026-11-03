@@ -19,6 +19,7 @@ Familiemedlemmene. Legges til med `pnpm add-member`, aldri fra klientene.
 | ------------- | ------ | ---------------------------------- |
 | `displayName` | string | admin-skriptet, eller medlemmet selv |
 | `email`       | string | admin-skriptet                     |
+| `role`        | `"adult"` eller `"child"` | admin-skriptet  |
 
 ## Tjenester
 
@@ -35,11 +36,11 @@ Personen logger inn i appen én gang, slik at kontoen finnes i Firebase Auth. De
 
 ```bash
 gcloud auth application-default login   # én gang
-pnpm add-member --email ingjerd@example.com --name Ingjerd
+pnpm add-member --email ingjerd@example.com --name Ingjerd --role adult
 ```
 
 Mot emulatorene (oppretter Auth-brukeren hvis den mangler):
 
 ```bash
-pnpm add-member --email amund@example.com --name Amund --emulator
+pnpm add-member --email amund@example.com --name Amund --role adult --emulator
 ```

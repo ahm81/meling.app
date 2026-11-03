@@ -29,6 +29,12 @@ beforeEach(async () => {
     await setDoc(doc(ctx.firestore(), paths.member("amund")), {
       displayName: "Amund",
       email: "amund@example.com",
+      role: "adult",
+    });
+    await setDoc(doc(ctx.firestore(), paths.member("ida")), {
+      displayName: "Ida",
+      email: "ida@example.com",
+      role: "child",
     });
   });
 });
@@ -51,7 +57,7 @@ describe("members", () => {
 
   it("denies adding yourself as a member", async () => {
     const db = env.authenticatedContext("stranger").firestore();
-    await assertFails(setDoc(doc(db, paths.member("stranger")), { displayName: "X", email: "x@example.com" }));
+    await assertFails(setDoc(doc(db, paths.member("stranger")), { displayName: "X", email: "x@example.com", role: "adult" }));
   });
 
   it("lets a member change their own display name", async () => {
@@ -62,5 +68,10 @@ describe("members", () => {
   it("denies a member changing their email", async () => {
     const db = env.authenticatedContext("amund").firestore();
     await assertFails(updateDoc(doc(db, paths.member("amund")), { email: "other@example.com" }));
+  });
+
+  it("denies a member changing their own role", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(updateDoc(doc(db, paths.member("ida")), { role: "adult" }));
   });
 });

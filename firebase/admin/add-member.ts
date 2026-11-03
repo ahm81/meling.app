@@ -1,4 +1,4 @@
-// Adds a family member: pnpm add-member --email <email> --name <name> [--emulator]
+// Adds a family member: pnpm add-member --email <email> --name <name> --role adult|child [--emulator]
 //
 // In production the person must have signed in to the app once so their Auth account exists,
 // and you need Application Default Credentials (gcloud auth application-default login).
@@ -13,6 +13,7 @@ const { values } = parseArgs({
   options: {
     email: { type: "string" },
     name: { type: "string" },
+    role: { type: "string" },
     emulator: { type: "boolean", default: false },
   },
 });
@@ -22,7 +23,7 @@ if (values.emulator) {
   process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
 }
 
-const member = MemberDoc.parse({ displayName: values.name, email: values.email });
+const member = MemberDoc.parse({ displayName: values.name, email: values.email, role: values.role });
 
 initializeApp({ projectId: "meling-app" });
 const auth = getAuth();

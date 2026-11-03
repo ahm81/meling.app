@@ -10,6 +10,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
 
+    // Adults can manage content in services such as the christmas calendar.
+    // Roles are set with `pnpm add-member --role`, never by clients.
+    function isAdult() {
+      return isMember()
+        && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == "adult";
+    }
+
     match /members/{uid} {
       allow read: if isMember();
       allow update: if isMember() && request.auth.uid == uid
