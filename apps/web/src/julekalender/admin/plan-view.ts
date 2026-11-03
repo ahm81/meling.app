@@ -240,3 +240,41 @@ export function callableError(e: unknown): { message: string; stale: boolean } {
   }
   return { message: "Noe gikk galt. Prøv igjen om litt.", stale: false };
 }
+
+export interface PlanDiff {
+  /** One line per day whose steps differ, e.g. «Dag 5: trinn 9–11 → 9–12». */
+  days: string[];
+  added: Hidden[];
+  removed: Hidden[];
+}
+
+/** «trinn 9–11» from printed numbers when the steps are known, else «3 trinn». */
+function stepsLabel(ids: string[], index: StepIndex): string {
+  if (ids.length === 0) return "ingen trinn";
+  const steps = ids.map((id) => index.byId.get(id));
+  const first = steps[0];
+  const last = steps[steps.length - 1];
+  if (first && last && steps.every(Boolean)) {
+    const a = stepNo(first, index);
+    const b = stepNo(last, index);
+    if (first.manualId === last.manualId) return `trinn ${range(a, b)}`;
+  }
+  return `${ids.length} trinn`;
+}
+
+/** What changed from `prev` to `next`: days with different steps, and hidden regions added or removed (by id). */
+export function diffPlans(prev: Plan, next: Plan, index: StepIndex): PlanDiff {
+  const days: string[] = [];
+  next.days.forEach((d, i) => {
+    const before = prev.days[i]?.stepIds ?? [];
+    const same = before.length === d.stepIds.length && before.every((id, k) => id === d.stepIds[k]);
+    if (!same) days.push(`Dag ${i + 1}: ${stepsLabel(before, index)} → ${stepsLabel(d.stepIds, index)}`);
+  });
+  const prevIds = new Set(prev.hidden.map((h) => h.id));
+  const nextIds = new Set(next.hidden.map((h) => h.id));
+  return {
+    days,
+    added: next.hidden.filter((h) => !prevIds.has(h.id)),
+    removed: prev.hidden.filter((h) => !nextIds.has(h.id)),
+  };
+}

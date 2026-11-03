@@ -785,3 +785,65 @@ details summary {
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* Julekalender admin: historikk */
+.history {
+  display: grid;
+  gap: 1rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-row:last-child {
+  border-bottom: 0;
+}
+
+.history-row.current {
+  background: color-mix(in srgb, var(--green) 8%, var(--surface));
+}
+
+.history-main {
+  flex: 1 1 16rem;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.history-row button {
+  min-height: 44px;
+}
+
+.history-row button.restore {
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.history-diff {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.history-diff p,
+.history-diff ul {
+  margin: 0.25rem 0;
+}

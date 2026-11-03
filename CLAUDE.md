@@ -19,6 +19,11 @@ Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjeneste
 - Tilgang: innlogget bruker er medlem hvis og bare hvis `members/{uid}` finnes. Medlemmer legges til med `pnpm add-member`, aldri fra klientene.
 - Nye tjenester får egen samling på toppnivå og egen `match`-blokk med `isMember()` i `firestore.rules`, pluss regeltester.
 - Functions importerer `@meling/shared` via tsconfig-`paths` og tsup-bundling, ikke som npm-avhengighet.
+- Julekalender-functions (rendering av PDF, Gemini-analyse, fordeling, callables) ligger i
+  `firebase/functions/src/julekalender/`. AI er Gemini via Vertex AI med Application Default Credentials og
+  uten nøkler (prosjekt `meling-app`, location `global`). I emulatoren: `MELING_FAKE_AI=1` i
+  `firebase/functions/.env.local` (gitignored) gir en falsk AI uten nettverk.
+- `mupdf` (PDF-rendering) er AGPL-3.0. Det er en bevisst avhengighet i functions.
 - Ikke sjekk inn `Meling.xcodeproj`; endre `project.yml` og kjør `xcodegen generate`.
 
 ## Kommandoer
@@ -29,6 +34,8 @@ pnpm emulators            # Firebase Emulator Suite (UI på :4000)
 pnpm --filter @meling/web dev
 pnpm typecheck && pnpm test
 pnpm test:rules           # Firestore-regeltester mot emulatoren
+pnpm test:functions       # functions-tester mot emulatoren (prosjekt demo-meling)
+pnpm --filter @meling/functions check:load   # functions må la seg laste med require (også i CI)
 pnpm add-member --email <e-post> --name <navn> [--emulator]
 cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test

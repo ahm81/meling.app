@@ -4,7 +4,8 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type 
 import { doc, getDoc } from "firebase/firestore";
 import { MemberDoc, paths } from "@meling/shared";
 import { auth, db, useEmulators } from "./firebase";
-import { AdminShell, AdultOnly, Placeholder } from "./julekalender/admin/AdminShell";
+import { AdminShell, AdultOnly } from "./julekalender/admin/AdminShell";
+import { HistoryPage } from "./julekalender/admin/HistoryPage";
 import { ManualsPage } from "./julekalender/admin/ManualsPage";
 import { Overview } from "./julekalender/admin/Overview";
 import { PackingListPrint } from "./julekalender/admin/PackingListPrint";
@@ -103,7 +104,7 @@ export function App() {
             <Route index element={<Navigate to="manualer" replace />} />
             <Route path="manualer" element={<ManualsPage />} />
             <Route path="fordeling" element={<PlanPage />} />
-            <Route path="historikk" element={<Placeholder title="Historikk" />} />
+            <Route path="historikk" element={<HistoryPage />} />
             <Route path="pakkeliste" element={<PackingListPrint />} />
           </Route>
         </Route>
