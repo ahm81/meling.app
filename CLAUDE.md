@@ -19,6 +19,11 @@ Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjeneste
 - Tilgang: innlogget bruker er medlem hvis og bare hvis `members/{uid}` finnes. Medlemmer legges til med `pnpm add-member`, aldri fra klientene.
 - Nye tjenester får egen samling på toppnivå og egen `match`-blokk med `isMember()` i `firestore.rules`, pluss regeltester.
 - Functions importerer `@meling/shared` via tsconfig-`paths` og tsup-bundling, ikke som npm-avhengighet.
+- Julekalender-functions (rendering av PDF, Gemini-analyse, fordeling, callables) ligger i
+  `firebase/functions/src/julekalender/`. AI er Gemini via Vertex AI med Application Default Credentials og
+  uten nøkler (prosjekt `meling-app`, location `global`). I emulatoren: `MELING_FAKE_AI=1` i
+  `firebase/functions/.env.local` (gitignored) gir en falsk AI uten nettverk.
+- `mupdf` (PDF-rendering) er AGPL-3.0. Det er en bevisst avhengighet i functions.
 - Ikke sjekk inn `Meling.xcodeproj`; endre `project.yml` og kjør `xcodegen generate`.
 
 ## Kommandoer
@@ -29,10 +34,17 @@ pnpm emulators            # Firebase Emulator Suite (UI på :4000)
 pnpm --filter @meling/web dev
 pnpm typecheck && pnpm test
 pnpm test:rules           # Firestore-regeltester mot emulatoren
-pnpm add-member --email <e-post> --name <navn> [--emulator]
+pnpm test:functions       # functions-tester mot emulatoren (prosjekt demo-meling)
+pnpm --filter @meling/functions check:load   # functions må la seg laste med require (også i CI)
+pnpm add-member --email <e-post> --name <navn> --role adult|child [--emulator]
 cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test
 ```
+
+Julekalenderens Gemini-kall bruker modellen `GEMINI_MODEL` (standard `gemini-2.5-pro`) og Vertex-lokasjonen
+`GEMINI_LOCATION` (standard `global`). Begge leses fra miljøet ved hvert kall og er ikke hemmeligheter: sett dem i
+skallet for `try-analysis`, eller i `firebase/functions/.env.meling-app` (kan committes) for deploy.
+`MELING_FAKE_AI=1` i `firebase/functions/.env.local` gir falsk AI i emulatoren.
 
 Apple-appene konfigurerer Firebase bare hvis `GoogleService-Info.plist` finnes i app-bundlen.
 Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
@@ -46,7 +58,9 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
 - Autentisering mot Google Cloud skjer med Workload Identity (ingen nøkler i GitHub), med to kontoer:
   `github-deployer` (full deploy, kun GitHub-miljøet `production`, som bare `main` kan bruke) og
   `github-preview` (kun Hosting, kun GitHub-miljøet `preview`).
-  Engangsoppsett: `scripts/setup-github-deploy.sh`. Repo-variablene er
+  Engangsoppsett: `scripts/setup-github-deploy.sh`. Den må kjøres (av en prosjekteier) før første deploy av functions:
+  den slår på API-ene for Functions 2. gen, Eventarc, Pub/Sub, regler og Vertex AI og gir tjenesteagentene rollene
+  Firestore-triggere og `firestore.get` i `storage.rules` trenger. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
 - Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.
 - Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`, men API-nøkkelen committes aldri. CI setter

@@ -35,6 +35,45 @@ grant() {
     --role="$role" --condition=None --quiet >/dev/null
 }
 
+COMPUTE_SA="$PROJECT_NUMBER-compute@developer.gserviceaccount.com"
+
+# ---------------------------------------------------------------------------------------------
+# ONE-TIME OWNER STEPS for the first Cloud Functions (2nd gen) deploy. github-deployer cannot
+# enable APIs or change project IAM, so a project owner runs these once (re-running is harmless:
+# enabling an enabled API and adding an existing binding are no-ops).
+# ---------------------------------------------------------------------------------------------
+echo "APIs for Cloud Functions 2nd gen, Firestore triggers, rules and Vertex AI"
+# cloudfunctions/run/cloudbuild/artifactregistry: build and run 2nd gen functions on Cloud Run.
+# eventarc/pubsub: Firestore-triggered functions (onManualCreated) are delivered by Eventarc over Pub/Sub.
+# firebaserules: storage.rules call firestore.get() across services.
+# aiplatform: the julekalender functions call Gemini through Vertex AI.
+gcloud services enable --project "$PROJECT" \
+  cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com eventarc.googleapis.com pubsub.googleapis.com \
+  firebaserules.googleapis.com aiplatform.googleapis.com
+
+echo "Service agents and the functions runtime"
+# Enabling the APIs creates the service agents; make sure they exist before granting to them.
+for api in pubsub.googleapis.com eventarc.googleapis.com firebasestorage.googleapis.com; do
+  gcloud beta services identity create --service="$api" --project "$PROJECT" >/dev/null 2>&1 || true
+done
+# storage.rules read members/{uid} with firestore.get(); the Firebase Storage service agent needs this
+# role for that (the console offers the same grant the first time such rules are deployed).
+grant "service-$PROJECT_NUMBER@gcp-sa-firebasestorage.iam.gserviceaccount.com" roles/firebaserules.firestoreServiceAgent
+# Eventarc delivers events as authenticated Pub/Sub pushes: the Pub/Sub service agent mints the OIDC
+# tokens. Granted by default only on projects whose agent was created after 8 April 2021.
+grant "service-$PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com" roles/iam.serviceAccountTokenCreator
+# Firestore-triggered 2nd gen functions use the default compute service account as the trigger identity:
+# it must receive the events (eventReceiver) and invoke the function's Cloud Run service (run.invoker).
+grant "$COMPUTE_SA" roles/eventarc.eventReceiver
+grant "$COMPUTE_SA" roles/run.invoker
+# On newer projects Cloud Build builds function images as the default compute service account.
+grant "$COMPUTE_SA" roles/cloudbuild.builds.builder
+# The julekalender functions call Gemini through Vertex AI as the default compute service account
+# (Application Default Credentials, no key).
+grant "$COMPUTE_SA" roles/aiplatform.user
+# --------------------------------------------------------------------------------- end one-time
+
 echo "Service account $DEPLOY_SA"
 ensure_sa github-deployer "GitHub Actions deploy ($REPO, production)"
 # Hosting, rules and indexes (firebase.admin), Cloud Functions 2nd gen (cloudfunctions.admin,
@@ -45,9 +84,13 @@ for role in roles/firebase.admin roles/cloudfunctions.admin roles/run.viewer \
   roles/artifactregistry.admin roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer; do
   grant "$DEPLOY_SA" "$role"
 done
+# Why cloudfunctions.admin and not cloudfunctions.developer: both include eventarc.triggers.create (the
+# Firestore trigger) and run.services.create, but only admin has run.services.setIamPolicy, which the
+# CLI needs to make the callable functions invokable (Firebase then checks auth in the function).
 # Functions run as the default compute service account, and firebase-tools also requires actAs on
 # the App Engine default service account before any functions deploy.
-for runtime_sa in "$PROJECT_NUMBER-compute@developer.gserviceaccount.com" "$PROJECT@appspot.gserviceaccount.com"; do
+# The compute account is also the Cloud Build account (see above), which the deployer must act as too.
+for runtime_sa in "$COMPUTE_SA" "$PROJECT@appspot.gserviceaccount.com"; do
   echo "  roles/iam.serviceAccountUser on $runtime_sa"
   gcloud iam service-accounts add-iam-policy-binding "$runtime_sa" --project "$PROJECT" \
     --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser --quiet >/dev/null

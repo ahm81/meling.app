@@ -1,0 +1,319 @@
+import {
+  CalendarDoc,
+  DOOR_COUNT,
+  type Hidden,
+  type PageAnalysis,
+  type Wishes,
+  PageDoc,
+  type Plan,
+  type Step,
+  orderSteps,
+  paths,
+  storagePaths,
+} from "@meling/shared";
+import { type DocumentReference, FieldValue, type Firestore, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
+import { logger } from "firebase-functions";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { toConstraints, toPageAnalysis } from "./analysis";
+import { type Constraint, TooFewBrickStepsError, TooFewStepsError, UNSATISFIABLE, distribute } from "./distribute";
+import { type Ai, aiFromEnv } from "./gemini";
+import { PdfReadError, renderPdf } from "./pdf";
+import { StaleVersionError, writeVersion } from "./versions";
+
+type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
+export type PipelineDeps = { db: Firestore; bucket: Bucket; ai: Ai };
+
+const MAX_CONCURRENT_ANALYSES = 6;
+
+export const manualsOf = (db: Firestore, calId: string) => db.collection(`${paths.calendar(calId)}/manuals`);
+export const pagesOf = (db: Firestore, calId: string) => db.collection(`${paths.calendar(calId)}/pages`);
+
+/** Written with every manual status or progress write, and every draft change, to judge staleness. */
+const now = () => FieldValue.serverTimestamp();
+
+/** Top-level Firestore Timestamps as Dates, so a document can be parsed with the shared schemas. */
+export function withDates(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, v instanceof Timestamp ? v.toDate() : v]),
+  );
+}
+
+/** Runs `fn` over `items` with at most `limit` calls in flight; stops starting new calls after the first failure. */
+export async function forEachLimited<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const item = items[next++]!;
+      try {
+        await fn(item);
+      } catch (e) {
+        failed = true;
+        throw e;
+      }
+    }
+  };
+  const results = await Promise.allSettled(Array.from({ length: Math.min(limit, items.length) }, worker));
+  const rejected = results.find((r) => r.status === "rejected");
+  if (rejected) throw rejected.reason;
+}
+
+/**
+ * Renders a newly uploaded manual, analyses every page and, when it is the last manual to finish,
+ * makes the calendar's first draft. Failures end in status "error" with a Norwegian message; it never throws
+ * for them, so the trigger is not retried.
+ */
+export async function processManual({ db, bucket, ai }: PipelineDeps, calId: string, manualId: string): Promise<void> {
+  const manualRef = db.doc(paths.manual(calId, manualId));
+
+  // Firestore triggers are delivered at least once; only the first delivery moves "uploaded" on.
+  const started = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(manualRef);
+    if (!snap.exists || snap.get("status") !== "uploaded") return false;
+    tx.update(manualRef, { status: "rendering", error: null, updatedAt: now() });
+    return true;
+  });
+  if (started) await processClaimedManual({ db, bucket, ai }, calId, manualId);
+}
+
+/**
+ * The work of processManual once this run owns the manual (status "rendering"): also used by retryManual,
+ * which claims the manual itself. Resumable: pages that already have an analysis keep it, and page images
+ * that already exist are not uploaded again; only the missing pages are analysed. Page documents and images
+ * for pages the PDF no longer has are deleted. Never throws for pipeline failures.
+ */
+export async function processClaimedManual({ db, bucket, ai }: PipelineDeps, calId: string, manualId: string): Promise<void> {
+  const manualRef = db.doc(paths.manual(calId, manualId));
+  let stage: "rendering" | "analyzing" = "rendering";
+  try {
+    // The path is derived, not read from the client-written storagePath (the rules make them equal).
+    let pdf: Buffer;
+    try {
+      [pdf] = await bucket.file(storagePaths.manualPdf(calId, manualId)).download();
+    } catch (e) {
+      throw new UserFacingError("Fant ikke PDF-filen. Last opp manualen på nytt.", e);
+    }
+
+    // What an earlier run left: a page document is written after its image, so a document means an image.
+    const [manualSnap, existing] = await Promise.all([
+      manualRef.get(),
+      pagesOf(db, calId).where("manualId", "==", manualId).get(),
+    ]);
+    const earlierSetNumber = (manualSnap.get("setNumber") as string | null | undefined) ?? null;
+    const stored = new Map<number, { analysed: boolean }>();
+    for (const d of existing.docs) {
+      const p = PageDoc.safeParse(d.data());
+      if (p.success) stored.set(p.data.page, { analysed: p.data.analysis !== null });
+    }
+
+    const todo: { page: number; png: Buffer }[] = [];
+    let pageCount = 0;
+    let analysed = 0;
+    for await (const { page, png, width, height } of renderPdf(pdf)) {
+      pageCount = page;
+      const earlier = stored.get(page);
+      if (earlier?.analysed) {
+        analysed++;
+        continue;
+      }
+      const imagePath = storagePaths.pageImage(calId, manualId, page);
+      const [hasImage] = earlier ? await bucket.file(imagePath).exists() : [false];
+      if (!hasImage) await bucket.file(imagePath).save(png, { contentType: "image/png", resumable: false });
+      const doc: PageDoc = { manualId, page, imagePath, width, height, analysis: null };
+      await db.doc(paths.page(calId, manualId, page)).set(doc);
+      todo.push({ page, png });
+    }
+    const gone = [...stored.keys()].filter((page) => page > pageCount);
+    await Promise.all(
+      gone.flatMap((page) => [
+        db.doc(paths.page(calId, manualId, page)).delete(),
+        bucket.file(storagePaths.pageImage(calId, manualId, page)).delete({ ignoreNotFound: true }),
+      ]),
+    );
+    await manualRef.update({ pageCount, pagesAnalyzed: analysed, status: "analyzing", updatedAt: now() });
+
+    stage = "analyzing";
+    const setNumbers = new Map<number, string>();
+    await forEachLimited(todo, MAX_CONCURRENT_ANALYSES, async ({ page, png }) => {
+      const raw = await ai.analyzePage(png, page);
+      let parsed: { analysis: PageAnalysis; setNumber: string | null };
+      try {
+        parsed = toPageAnalysis(raw);
+      } catch (e) {
+        throw new Error(`Gemini side ${page}: svaret har feil format`, { cause: e });
+      }
+      if (parsed.setNumber) setNumbers.set(page, parsed.setNumber);
+      await db.doc(paths.page(calId, manualId, page)).update({ analysis: parsed.analysis });
+      await manualRef.update({ pagesAnalyzed: FieldValue.increment(1), updatedAt: now() });
+    });
+
+    const firstWithSetNumber = [...setNumbers.keys()].sort((a, b) => a - b)[0];
+    await manualRef.update({
+      status: "done",
+      updatedAt: now(),
+      // Pages kept from an earlier run are not read again, so their set number is the one stored then.
+      setNumber: firstWithSetNumber === undefined ? earlierSetNumber : setNumbers.get(firstWithSetNumber)!,
+    });
+  } catch (e) {
+    logger.error("Manual pipeline failed", { calId, manualId, stage, error: e });
+    await safeUpdate(manualRef, { status: "error", error: manualErrorMessage(e, stage), updatedAt: now() }, { calId, manualId });
+    return;
+  }
+
+  try {
+    await draftIfAllManualsDone(db, ai, calId);
+  } catch (e) {
+    logger.error("Could not start the first draft", { calId, manualId, error: e });
+  }
+}
+
+/** Records a failure on a document; a failing write is logged, never rethrown, so the trigger is not retried. */
+export async function safeUpdate(ref: DocumentReference, data: Record<string, unknown>, context: Record<string, string>): Promise<void> {
+  try {
+    await ref.update(data);
+  } catch (e) {
+    logger.error("Could not record failure", { ...context, path: ref.path, data, error: e });
+  }
+}
+
+/** Errors whose (Norwegian) message is meant for the adults: too few steps, unsatisfiable wishes, Gemini, stale versions. */
+export function isDraftDomainError(e: unknown): e is Error {
+  if (e instanceof TooFewStepsError || e instanceof TooFewBrickStepsError || e instanceof StaleVersionError) return true;
+  return e instanceof Error && (e.message.startsWith("Gemini ") || e.message === UNSATISFIABLE);
+}
+
+/** Only domain errors reach the adults as-is; anything else gets a generic message (the full error is logged). */
+export function draftErrorMessage(e: unknown, what = "Førsteutkastet"): string {
+  return isDraftDomainError(e) ? e.message : `${what} kunne ikke lages på grunn av en intern feil.`;
+}
+
+class UserFacingError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+    this.name = "UserFacingError";
+  }
+}
+
+function manualErrorMessage(e: unknown, stage: "rendering" | "analyzing"): string {
+  if (e instanceof PdfReadError || e instanceof UserFacingError) return e.message;
+  // Errors from the Gemini client are already Norwegian and name the page.
+  if (e instanceof Error && e.message.startsWith("Gemini ")) return e.message;
+  return stage === "rendering"
+    ? "Sidene i manualen kunne ikke lagres. Last opp manualen på nytt."
+    : "Sidene i manualen kunne ikke analyseres. Last opp manualen på nytt.";
+}
+
+export async function draftIfAllManualsDone(db: Firestore, ai: Ai, calId: string): Promise<void> {
+  const [manuals, cal] = await Promise.all([manualsOf(db, calId).get(), db.doc(paths.calendar(calId)).get()]);
+  if (!manuals.docs.every((m) => m.get("status") === "done")) return;
+  if (cal.get("draft") !== "waiting") return;
+  await makeFirstDraft(db, ai, calId);
+}
+
+const WHOLE_PAGE_LABELS: Partial<Record<PageAnalysis["kind"], string>> = {
+  cover: "Forside",
+  inventory: "Brikkeoversikt",
+  other: "Side uten byggetrinn",
+};
+
+/** What the child should not see: every spoiler, plus whole pages that are not building instructions. */
+export function aiHidden(pages: { manualId: string; page: number; analysis: PageAnalysis }[]): Hidden[] {
+  return pages.flatMap(({ manualId, page, analysis }) => {
+    const pageLabel = WHOLE_PAGE_LABELS[analysis.kind];
+    // A page hidden whole already covers its spoilers.
+    if (pageLabel) return [{ id: `ai:${manualId}:${page}:page`, manualId, page, bbox: null, label: pageLabel, source: "ai" }];
+    return analysis.spoilers.map(
+      (s, i): Hidden => ({ id: `ai:${manualId}:${page}:spoiler:${i}`, manualId, page, bbox: s.bbox, label: s.label, source: "ai" }),
+    );
+  });
+}
+
+function distributeWithFallback(steps: Step[], balance: "bricks" | "steps", constraints: Constraint[]): Plan["days"] {
+  try {
+    return distribute(steps, { balance, constraints });
+  } catch (e) {
+    // Too few steps with bricks to balance on: balance on steps instead.
+    if (balance === "bricks" && e instanceof TooFewBrickStepsError) return distribute(steps, { balance: "steps", constraints });
+    throw e;
+  }
+}
+
+type AnalysedPage = { manualId: string; manualOrder: number; page: number; analysis: PageAnalysis };
+
+/** The calendar's analysed pages (of manuals that still exist) and their steps in building order. */
+export async function loadSteps(db: Firestore, calId: string): Promise<{ pages: AnalysedPage[]; steps: Step[] }> {
+  const [manuals, pageSnaps] = await Promise.all([manualsOf(db, calId).get(), pagesOf(db, calId).get()]);
+  const manualOrder = new Map(manuals.docs.map((m) => [m.id, m.get("order") as number]));
+  const pages = pageSnaps.docs.flatMap((d) => {
+    const p = PageDoc.parse(d.data());
+    const order = manualOrder.get(p.manualId);
+    return p.analysis && order !== undefined ? [{ manualId: p.manualId, manualOrder: order, page: p.page, analysis: p.analysis }] : [];
+  });
+  return { pages, steps: orderSteps(pages) };
+}
+
+/**
+ * The AI draft for the calendar's pages and the adults' wishes: steps distributed over the days
+ * (balanced on bricks, or on steps when too few steps have bricks) and the AI's hidden regions.
+ * Shared by the first draft and redraft. Throws the domain errors of distribute and Gemini.
+ */
+export async function computeDraft(db: Firestore, ai: Ai, calId: string, wishes: Wishes): Promise<Plan> {
+  const { pages, steps } = await loadSteps(db, calId);
+  // Checked here too so a hopeless draft does not spend an AI call on the wishes.
+  if (steps.length < DOOR_COUNT) throw new TooFewStepsError(steps.length);
+  let constraints: Constraint[] = [];
+  if (wishes.text.trim()) {
+    const raw = await ai.interpretWishes(
+      wishes.text,
+      steps.map(({ id, printedNumber, manualOrder, page, parts }) => ({ id, printedNumber, manualOrder, page, parts })),
+    );
+    try {
+      constraints = toConstraints(raw, new Set(steps.map((s) => s.id)));
+    } catch (e) {
+      throw new Error("Gemini ønsker: svaret har feil format", { cause: e });
+    }
+  }
+  return { days: distributeWithFallback(steps, wishes.balance, constraints), hidden: aiHidden(pages) };
+}
+
+/**
+ * Makes version 1 from the analysed pages and the adults' wishes. Runs at most once per calendar:
+ * the move from draft "waiting" to "running" is transactional. Failures end in draft "error" with draftError.
+ */
+export async function makeFirstDraft(db: Firestore, ai: Ai, calId: string): Promise<void> {
+  const calRef = db.doc(paths.calendar(calId));
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(calRef);
+    if (!snap.exists || snap.get("draft") !== "waiting") return null;
+    tx.update(calRef, { draft: "running", draftError: null, draftUpdatedAt: now() });
+    return snap.data();
+  });
+  if (!claimed) return;
+
+  try {
+    const cal = CalendarDoc.parse(withDates(claimed));
+    const plan = await computeDraft(db, ai, calId, cal.wishes);
+    await writeVersion(db, calId, {
+      baseVersion: cal.currentVersion,
+      author: { kind: "ai", requestedBy: null },
+      summary: "Førsteutkast fra AI",
+      plan,
+    });
+    await calRef.update({ draft: "done", draftError: null, draftUpdatedAt: now() });
+  } catch (e) {
+    logger.error("First draft failed", { calId, error: e });
+    await safeUpdate(calRef, { draft: "error", draftError: draftErrorMessage(e), draftUpdatedAt: now() }, { calId });
+  }
+}
+
+export const onManualCreated = onDocumentCreated(
+  { document: "julekalender/{calId}/manuals/{manualId}", timeoutSeconds: 540, memory: "2GiB" },
+  async (event) => {
+    await processManual(
+      { db: getFirestore(), bucket: getStorage().bucket(), ai: aiFromEnv() },
+      event.params.calId,
+      event.params.manualId,
+    );
+  },
+);

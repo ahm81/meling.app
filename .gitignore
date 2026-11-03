@@ -9,6 +9,9 @@ lib/
 .env.*.local
 
 # Firebase
+firebase/functions/.try-analysis/
+# Manual PDFs are LEGO's content; never commit them.
+*.pdf
 .firebase/
 .firebase-data/
 firebase-debug.log

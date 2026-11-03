@@ -2,9 +2,39 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null
+    function isMember() {
+      return request.auth != null
         && firestore.exists(/databases/(default)/documents/members/$(request.auth.uid));
+    }
+
+    // Storage rules cannot call isAdult() from the Firestore rules.
+    function isAdult() {
+      return isMember()
+        && firestore.get(/databases/(default)/documents/members/$(request.auth.uid)).data.role == 'adult';
+    }
+
+    // Julekalender: only adults read; only adults upload PDF manuals. Everything else
+    // (page images, cutouts) is written by functions (admin SDK).
+    match /julekalender/{calId}/manuals/{file} {
+      allow read: if isAdult();
+      allow write: if isAdult()
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    match /julekalender/{calId}/{rest=**} {
+      allow read: if isAdult();
+      allow write: if false;
+    }
+
+    // Everything else is open to members, except julekalender (matched above). Storage
+    // rules grant access if any matching rule allows it, so the catch-all must exclude it.
+    match /{topLevel} {
+      allow read, write: if isMember();
+    }
+
+    match /{topLevel}/{rest=**} {
+      allow read, write: if isMember() && topLevel != 'julekalender';
     }
   }
 }

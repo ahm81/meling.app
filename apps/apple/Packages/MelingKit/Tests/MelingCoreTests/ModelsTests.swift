@@ -3,9 +3,9 @@ import MelingCore
 import Testing
 
 @Test func memberDocDecodesFromSharedShape() throws {
-    let json = #"{"displayName":"Amund","email":"amund@example.com"}"#
+    let json = #"{"displayName":"Amund","email":"amund@example.com","role":"adult"}"#
     let member = try JSONDecoder().decode(MemberDoc.self, from: Data(json.utf8))
-    #expect(member == MemberDoc(displayName: "Amund", email: "amund@example.com"))
+    #expect(member == MemberDoc(displayName: "Amund", email: "amund@example.com", role: .adult))
 }
 
 @Test func memberPathMatchesTypeScript() {
