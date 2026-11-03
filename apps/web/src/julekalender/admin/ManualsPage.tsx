@@ -270,7 +270,7 @@ export function ManualsPage() {
     if (!ok) return;
     setRedrafting(true);
     setRedraftError(null);
-    redraft({ calendarId: calId, baseVersion: calendar.currentVersion ?? 0 })
+    redraft({ calendarId: calId, baseVersion: calendar.currentVersion })
       .catch((e) => {
         console.error(e);
         setRedraftError("Kunne ikke lage nytt utkast. Prøv igjen om litt.");

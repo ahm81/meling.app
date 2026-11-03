@@ -16,7 +16,7 @@ export const restoreVersion = httpsCallable<
   { version: number }
 >(functions, "restoreVersion", standard);
 
-export const redraft = httpsCallable<{ calendarId: string; baseVersion: number }, { version: number }>(
+export const redraft = httpsCallable<{ calendarId: string; baseVersion: number | null }, { version: number }>(
   functions,
   "redraft",
   long,
