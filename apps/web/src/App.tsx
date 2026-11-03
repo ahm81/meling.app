@@ -7,6 +7,8 @@ import { auth, db, useEmulators } from "./firebase";
 import { AdminShell, AdultOnly, Placeholder } from "./julekalender/admin/AdminShell";
 import { ManualsPage } from "./julekalender/admin/ManualsPage";
 import { Overview } from "./julekalender/admin/Overview";
+import { PackingListPrint } from "./julekalender/admin/PackingListPrint";
+import { PlanPage } from "./julekalender/admin/PlanPage";
 
 type Access =
   | { state: "loading" }
@@ -100,9 +102,9 @@ export function App() {
           <Route path=":calId" element={<AdminShell />}>
             <Route index element={<Navigate to="manualer" replace />} />
             <Route path="manualer" element={<ManualsPage />} />
-            <Route path="fordeling" element={<Placeholder title="Fordeling" />} />
+            <Route path="fordeling" element={<PlanPage />} />
             <Route path="historikk" element={<Placeholder title="Historikk" />} />
-            <Route path="pakkeliste" element={<Placeholder title="Pakkeliste" />} />
+            <Route path="pakkeliste" element={<PackingListPrint />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

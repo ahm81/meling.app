@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useParams } from "react-router";
-import { collection, doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, setDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable } from "firebase/storage";
-import { PageDoc, Wishes, paths, storagePaths } from "@meling/shared";
+import { Wishes, paths, storagePaths } from "@meling/shared";
 import { db, storage } from "../../firebase";
-import { fromFirestore } from "../../firestore";
 import { redraft, retryManual } from "./api";
+import { manualName } from "./plan-view";
+import { usePages } from "./usePages";
 import { useCalendar, type Manual } from "./useCalendar";
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -21,17 +22,8 @@ interface Upload {
   done: boolean;
 }
 
-interface PageEntry {
-  id: string;
-  page: PageDoc;
-}
-
 function isStale(updatedAt: Date | undefined, now: number): boolean {
   return !!updatedAt && now - updatedAt.getTime() > STALE_MS;
-}
-
-function manualName(m: Manual): string {
-  return m.setNumber ? `${m.setNumber} (${m.fileName})` : m.fileName;
 }
 
 function validate(file: File): string | null {
@@ -39,30 +31,6 @@ function validate(file: File): string | null {
   if (!isPdf) return "Bare PDF-filer støttes.";
   if (file.size >= MAX_BYTES) return "Filen er for stor (maks 50 MB).";
   return null;
-}
-
-function usePages(calId: string): { pages: PageEntry[]; error: string | null } {
-  const [pages, setPages] = useState<PageEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    setPages([]);
-    setError(null);
-    return onSnapshot(
-      collection(db, paths.calendar(calId), "pages"),
-      (snap) =>
-        setPages(
-          snap.docs.flatMap((d) => {
-            const parsed = PageDoc.safeParse(fromFirestore(d.data()));
-            return parsed.success ? [{ id: d.id, page: parsed.data }] : [];
-          }),
-        ),
-      (e) => {
-        console.error("sidene", e);
-        setError("Kunne ikke hente sidene AI-en har lest.");
-      },
-    );
-  }, [calId]);
-  return { pages, error };
 }
 
 function ManualRow({
@@ -327,7 +295,7 @@ export function ManualsPage() {
       {calendar.draft === "done" && (
         <div className="banner ok" role="status">
           <span>Førsteutkast klart</span>
-          <Link className="btn" to={`/julekalender/admin/${calId}/fordeling`}>
+          <Link className="btn primary" to={`/julekalender/admin/${calId}/fordeling`}>
             Se fordelingen
           </Link>
         </div>
