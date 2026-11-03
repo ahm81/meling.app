@@ -25,7 +25,7 @@ export const redraft = httpsCallable<{ calendarId: string; baseVersion: number |
 export const renderCutouts = httpsCallable<
   { calendarId: string; version: number },
   { cutouts: Record<string, string> }
->(functions, "renderCutouts", standard);
+>(functions, "renderCutouts", long);
 
 export const retryManual = httpsCallable<{ calendarId: string; manualId: string }, { ok: true }>(
   functions,
