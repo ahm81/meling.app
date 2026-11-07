@@ -81,7 +81,7 @@ describe("Gemini config", () => {
   it("defaults to the built-in model on global", () => {
     vi.stubEnv("GEMINI_MODEL", "");
     vi.stubEnv("GEMINI_LOCATION", "");
-    expect(geminiConfig()).toEqual({ model: "gemini-2.5-pro", location: "global" });
+    expect(geminiConfig()).toEqual({ model: "gemini-3.8-flash", location: "global" });
   });
 
   it("reads model and location from the environment at call time", async () => {
