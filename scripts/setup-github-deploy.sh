@@ -53,9 +53,13 @@ gcloud services enable --project "$PROJECT" \
   firebaserules.googleapis.com aiplatform.googleapis.com
 
 echo "Service agents and the functions runtime"
-# Enabling the APIs creates the service agents; make sure they exist before granting to them.
+# Enabling an API does not always create its service agent; create them before granting to them.
+# (The Service Usage API directly, since `gcloud beta services identity create` prompts to install
+# the beta component.)
+TOKEN=$(gcloud auth print-access-token)
 for api in pubsub.googleapis.com eventarc.googleapis.com firebasestorage.googleapis.com; do
-  gcloud beta services identity create --service="$api" --project "$PROJECT" >/dev/null 2>&1 || true
+  curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}' \
+    "https://serviceusage.googleapis.com/v1beta1/projects/$PROJECT_NUMBER/services/$api:generateServiceIdentity" >/dev/null
 done
 # storage.rules read members/{uid} with firestore.get(); the Firebase Storage service agent needs this
 # role for that (the console offers the same grant the first time such rules are deployed).
