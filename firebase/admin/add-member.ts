@@ -1,8 +1,10 @@
 // Adds a family member: pnpm add-member --email <email> --name <name> --role adult|child [--emulator]
 //
-// In production the person must have signed in to the app once so their Auth account exists,
-// and you need Application Default Credentials (gcloud auth application-default login).
-// With --emulator the Auth user is created if it doesn't exist.
+// The person does not need to have signed in first: if no Auth account has the email, one is created
+// with no sign-in method and the email marked as verified. Firebase allows one account per email, so
+// signing in with Google on that address later lands in this account (same uid, already a member).
+// Google is trusted for Gmail and Google Workspace addresses; other addresses may need a test first.
+// Production needs Application Default Credentials (gcloud auth application-default login).
 import { parseArgs } from "node:util";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -33,10 +35,13 @@ async function findOrCreateUser() {
     return await auth.getUserByEmail(member.email);
   } catch (error) {
     if ((error as { code?: string }).code !== "auth/user-not-found") throw error;
-    if (!values.emulator) {
-      throw new Error(`${member.email} har ingen konto. Be personen logge inn i appen én gang først.`);
-    }
-    return auth.createUser({ email: member.email, displayName: member.displayName });
+    const created = await auth.createUser({
+      email: member.email,
+      emailVerified: true,
+      displayName: member.displayName,
+    });
+    console.log(`Opprettet konto for ${member.email}. Personen logger inn med Google på samme adresse.`);
+    return created;
   }
 }
 
