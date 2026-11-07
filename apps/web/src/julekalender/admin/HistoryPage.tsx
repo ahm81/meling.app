@@ -8,6 +8,7 @@ import { restoreVersion } from "./api";
 import { buildSteps, callableError, diffPlans, indexSteps } from "./plan-view";
 import { useCalendar } from "./useCalendar";
 import { usePages } from "./usePages";
+import { useConfirm } from "./useConfirm";
 
 /** «3. nov. kl. 21.14» */
 export function formatTime(d: Date): string {
@@ -85,6 +86,7 @@ export function HistoryPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ message: string; ok: boolean } | null>(null);
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const index = useMemo(
     () =>
@@ -100,7 +102,8 @@ export function HistoryPage() {
 
   async function restore(v: VersionDoc) {
     if (current === null || inFlight.current) return;
-    if (!window.confirm(`Gjenopprette versjon ${v.number}? Det lager en ny versjon, og den gjeldende blir liggende i historikken.`)) return;
+    if (!(await confirm(`Gjenopprette versjon ${v.number}? Det lager en ny versjon, og den gjeldende blir liggende i historikken.`, "Gjenopprett"))) return;
+    if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setNotice(null);
@@ -121,6 +124,7 @@ export function HistoryPage() {
 
   return (
     <section className="history">
+      {dialog}
       {error && <p role="alert">{error}</p>}
       {versionsError && <p role="alert">{versionsError}</p>}
       <div>
