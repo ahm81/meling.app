@@ -3,7 +3,8 @@ import type { Part } from "@meling/shared";
 import { z } from "zod";
 import { RawConstraints, RawPageAnalysis } from "./analysis";
 
-export const GEMINI_MODEL = "gemini-2.5-pro";
+// gemini-2.5-pro is no longer available to this project on Vertex (404); 3.8 Flash was checked with try-analysis.
+export const GEMINI_MODEL = "gemini-3.8-flash";
 export const GEMINI_LOCATION = "global";
 
 /** Model and Vertex location, read from the environment on every call (functions .env or the shell). */
