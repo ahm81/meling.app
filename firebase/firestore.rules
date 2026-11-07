@@ -10,6 +10,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
 
+    // Adults can manage content in services such as the christmas calendar.
+    // Roles are set with `pnpm add-member --role`, never by clients.
+    function isAdult() {
+      return isMember()
+        && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == "adult";
+    }
+
     match /members/{uid} {
       allow read: if isMember();
       allow update: if isMember() && request.auth.uid == uid
@@ -17,6 +24,75 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // New services (e.g. christmasCalendar) get their own match block using isMember().
+    // Julekalender: only adults. Versions and pages are written by functions (admin SDK) only.
+    // draftUpdatedAt (calendar) and updatedAt (manual) are set by functions only, so the create shapes omit them.
+    match /julekalender/{calId} {
+      // Wishes as in the shared Wishes schema.
+      function validWishes(w) {
+        return w is map
+          && w.keys().hasOnly(['balance', 'text'])
+          && w.keys().hasAll(['balance', 'text'])
+          && w.balance in ['bricks', 'steps']
+          && w.text is string && w.text.size() <= 1000;
+      }
+
+      allow read: if isAdult();
+      allow create: if isAdult()
+        && request.resource.data.keys().hasOnly(
+          ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
+        && request.resource.data.keys().hasAll(
+          ['year', 'childUid', 'childName', 'wishes', 'currentVersion', 'draft', 'draftError', 'createdBy'])
+        && request.resource.data.year is int && request.resource.data.year >= 2024
+        && request.resource.data.childUid is string
+        && request.resource.data.childName is string
+        && calId == string(request.resource.data.year) + '-' + request.resource.data.childUid
+        && validWishes(request.resource.data.wishes)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.currentVersion == null
+        && request.resource.data.draft == 'waiting'
+        && request.resource.data.draftError == null;
+      allow update: if isAdult()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wishes', 'childName'])
+        && validWishes(request.resource.data.wishes)
+        && request.resource.data.childName is string;
+      allow delete: if false;
+
+      match /manuals/{manualId} {
+        allow read: if isAdult();
+        // Firestore auto-ids; no ':' since step ids are `${manualId}:${page}:${index}`.
+        allow create: if isAdult()
+          && manualId.matches('^[A-Za-z0-9_-]+$')
+          && request.resource.data.keys().hasOnly(
+            ['order', 'fileName', 'storagePath', 'status', 'pageCount', 'pagesAnalyzed', 'setNumber', 'error'])
+          && request.resource.data.keys().hasAll(
+            ['order', 'fileName', 'storagePath', 'status', 'pageCount', 'pagesAnalyzed', 'setNumber', 'error'])
+          && request.resource.data.order is int && request.resource.data.order >= 1
+          && request.resource.data.fileName is string
+          && request.resource.data.storagePath == 'julekalender/' + calId + '/manuals/' + manualId + '.pdf'
+          && request.resource.data.status == 'uploaded'
+          && request.resource.data.pageCount == null
+          && request.resource.data.pagesAnalyzed == 0
+          && request.resource.data.setNumber == null
+          && request.resource.data.error == null;
+        // Adults choose the booklet order; everything else is written by functions.
+        // Deleting a manual goes through the deleteManual function (it also removes pages and files).
+        allow update: if isAdult()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['order'])
+          && request.resource.data.order is int && request.resource.data.order >= 1;
+        allow delete: if false;
+      }
+
+      match /pages/{pageId} {
+        allow read: if isAdult();
+        allow write: if false;
+      }
+
+      match /versions/{versionId} {
+        allow read: if isAdult();
+        allow write: if false;
+      }
+    }
+
+    // New services get their own match block using isMember().
   }
 }

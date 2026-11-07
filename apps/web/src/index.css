@@ -24,3 +24,832 @@ form {
   color: #78350f;
   font-size: 0.875rem;
 }
+
+/* Julekalender admin */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --text: #1b1f1d;
+  --muted: #5b635f;
+  --line: #cfcbc0;
+  --green: #1f5c45;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161a18;
+    --surface: #1f2522;
+    --text: #ecebe6;
+    --muted: #a3aba7;
+    --line: #3a423e;
+    --green: #6fc29d;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+}
+
+a {
+  color: var(--green);
+}
+
+button,
+select,
+.btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+button.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+.admin {
+  max-width: 70rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin h1,
+.card h2 {
+  font-family: Fraunces, Georgia, serif;
+  margin: 0;
+}
+
+.admin-head {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-head.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.crumbs {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-tabs a {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.admin-tabs a.active {
+  border-color: var(--green);
+  font-weight: 600;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.card dl {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.card dt {
+  color: var(--muted);
+}
+
+.card dd {
+  margin: 0;
+  text-align: right;
+}
+
+.card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-links a {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.card.create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pill {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e8e6df;
+  color: #3b403d;
+}
+
+.badge-run {
+  background: #dbe8f7;
+  color: #1b3a5e;
+}
+
+.badge-ok {
+  background: #dcefe5;
+  color: #174a36;
+}
+
+.badge-err {
+  background: #fcdcd6;
+  color: #7a1f10;
+}
+
+.badge-wait {
+  background: #fcebd3;
+  color: #7a4300;
+}
+
+/* Julekalender admin: manualer */
+.manuals {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.manuals label {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.manuals textarea {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  resize: vertical;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+.stepper li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+}
+
+.stepper .dot {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  font-size: 0.75rem;
+}
+
+.stepper .current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stepper .current .dot,
+.stepper .past .dot {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--bg);
+}
+
+.stepper .future {
+  opacity: 0.55;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+}
+
+.banner.run {
+  background: #dbe8f7;
+  color: #1b3a5e;
+}
+
+.banner.ok {
+  background: #dcefe5;
+  color: #174a36;
+}
+
+.banner.err {
+  background: #fcdcd6;
+  color: #7a1f10;
+}
+
+.dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1rem;
+  border: 2px dashed var(--line);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.dropzone.over {
+  border-color: var(--green);
+}
+
+.dropzone p {
+  margin: 0;
+}
+
+.primary-label {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.manual-list,
+.hidden-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.manual-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.manual-main {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 14rem;
+  overflow-wrap: anywhere;
+}
+
+.manual-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.manual-status {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.manual-status.ok {
+  color: var(--green);
+}
+
+.manual-status.err {
+  color: #b3261e;
+}
+
+.manual-main progress {
+  width: 100%;
+}
+
+/* Readable primary link button, also on the light status banners (fixed colours in both themes). */
+.btn.primary {
+  background: #1f5c45;
+  border-color: #1f5c45;
+  color: #fff;
+  font-weight: 600;
+}
+
+.small {
+  font-size: 0.8125rem;
+}
+
+/* Julekalender admin: fordeling */
+.plan,
+.packing,
+.day-detail {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.plan-title,
+.card h3,
+.bag h3 {
+  margin: 0;
+}
+
+.plan-title {
+  font-family: Fraunces, Georgia, serif;
+}
+
+.card-head.wrap {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.plan-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.day-list {
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+
+/* Side by side only when both fit; below this the day list sits above the detail. */
+@media (min-width: 900px) {
+  .plan-layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  }
+
+  .day-list {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+}
+
+.plan-detail {
+  min-width: 0;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.day-row {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 3.5rem;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  text-align: left;
+}
+
+.day-row.selected {
+  background: #e3f0e9;
+  color: #1b1f1d;
+  box-shadow: inset 4px 0 0 #1f5c45;
+}
+
+.day-head {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.day-row .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.day-row > * {
+  min-width: 0;
+}
+
+.day-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.flag {
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #fcebd3;
+  color: #7a4300;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.page-cell {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.page-figure {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+}
+
+.page-figure img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+}
+
+.overlay {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
+.overlay-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  margin: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1b1f1d;
+}
+
+.step-today {
+  border: 3px solid #1f5c45;
+}
+
+.step-other {
+  background: rgba(194, 200, 204, 0.75);
+}
+
+.hidden-area {
+  background: repeating-linear-gradient(45deg, rgba(122, 31, 16, 0.45) 0 6px, rgba(255, 255, 255, 0.35) 6px 12px);
+  border: 2px dashed #7a1f10;
+  align-items: flex-end;
+}
+
+.picked {
+  border: 3px solid #1b3a5e;
+  background: rgba(27, 58, 94, 0.25);
+}
+
+.picker-surface {
+  touch-action: none;
+  cursor: crosshair;
+  max-width: 36rem;
+}
+
+.region-picker {
+  border-color: #1b3a5e;
+}
+
+.region-picker label {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.region-picker input {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+button.selected,
+button[aria-pressed="true"] {
+  border-color: var(--green);
+  font-weight: 600;
+}
+
+.cutouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.cutouts.stale {
+  opacity: 0.5;
+}
+
+.cutout {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  flex: 0 1 12rem;
+  min-width: 0;
+}
+
+.cutout img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.cutout-empty {
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.part-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.part-line {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.part-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.swatch {
+  flex: none;
+  width: 28px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.swatch.none {
+  visibility: hidden;
+}
+
+.reconcile {
+  display: grid;
+  gap: 0.5rem;
+}
+
+details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Julekalender admin: pakkeliste */
+.bags {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  gap: 1rem;
+}
+
+.bag {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  break-inside: avoid;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  :root {
+    --bg: #fff;
+    --surface: #fff;
+    --text: #000;
+    --muted: #333;
+    --line: #999;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .admin {
+    padding: 0;
+    max-width: none;
+  }
+
+  .admin-head,
+  .no-print,
+  nav,
+  button,
+  .btn {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  .bags {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bag {
+    border-color: #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .swatch {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+/* Julekalender admin: historikk */
+.history {
+  display: grid;
+  gap: 1rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-row:last-child {
+  border-bottom: 0;
+}
+
+.history-row.current {
+  background: color-mix(in srgb, var(--green) 8%, var(--surface));
+}
+
+.history-main {
+  flex: 1 1 16rem;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.history-row button {
+  min-height: 44px;
+}
+
+.history-row button.restore {
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.history-diff {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.history-diff p,
+.history-diff ul {
+  margin: 0.25rem 0;
+}

@@ -34,4 +34,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The Functions emulator and runtime load lib/index.js with require(), which fails on top-level await.
+      - run: pnpm --filter @meling/functions check:load
       - run: pnpm test:rules
+      - run: pnpm test:functions

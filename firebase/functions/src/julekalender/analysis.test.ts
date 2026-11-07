@@ -1,0 +1,172 @@
+import { PageAnalysis } from "@meling/shared";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { RawConstraints, RawPageAnalysis, toConstraints, toPageAnalysis } from "./analysis";
+import { fakeAi, vertexAi } from "./gemini";
+
+const step = (box: number[], extra: object = {}) => ({
+  printed_number: 1,
+  box_2d: box,
+  parts: [],
+  ...extra,
+});
+const raw = (steps: unknown[], extra: object = {}) => ({
+  kind: "instructions",
+  steps,
+  spoilers: [],
+  inventory: [],
+  set_number: null,
+  ...extra,
+});
+
+describe("toPageAnalysis", () => {
+  it("converts box_2d to normalized bbox", () => {
+    const { analysis } = toPageAnalysis(raw([step([100, 200, 600, 700])]));
+    const b = analysis.steps[0]!.bbox;
+    expect(b.x).toBeCloseTo(0.2);
+    expect(b.y).toBeCloseTo(0.1);
+    expect(b.w).toBeCloseTo(0.5);
+    expect(b.h).toBeCloseTo(0.5);
+    expect(PageAnalysis.parse(analysis)).toBeTruthy();
+  });
+
+  it("accepts steps without parts", () => {
+    const { analysis } = toPageAnalysis(raw([step([0, 0, 500, 500])]));
+    expect(analysis.steps[0]!.parts).toEqual([]);
+  });
+
+  it("drops zero-area boxes and clamps out-of-range values", () => {
+    const { analysis } = toPageAnalysis(
+      raw(
+        [step([0, 0, 0, 500]), step([-50, -10, 1200, 1100], { printed_number: 2 })],
+        { spoilers: [{ box_2d: [10, 10, 10, 10], label: "x" }] },
+      ),
+    );
+    expect(analysis.steps).toHaveLength(1);
+    expect(analysis.steps[0]!.bbox).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(analysis.spoilers).toEqual([]);
+  });
+
+  it("keeps full-width boxes and survives float error", () => {
+    const { analysis } = toPageAnalysis(raw([step([0, 0, 500, 1000]), step([300, 700, 1000, 1000])]));
+    expect(analysis.steps[0]!.bbox.w).toBe(1);
+    const b = analysis.steps[1]!.bbox;
+    expect(b.x + b.w).toBeLessThanOrEqual(1);
+    expect(b.y + b.h).toBeLessThanOrEqual(1);
+    // 0.7 + 0.3 === 0.9999999999999999 style sums must not be rejected
+    for (const v of [1, 3, 7, 9, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]) {
+      expect(() => toPageAnalysis(raw([step([0, v * 10, 1000, 1000])]))).not.toThrow();
+    }
+  });
+
+  it("returns set number", () => {
+    expect(toPageAnalysis(raw([], { kind: "cover", set_number: "75192" })).setNumber).toBe("75192");
+  });
+
+  it("drops invalid parts and keeps the step", () => {
+    const parts = [
+      { qty: 2, name: "Kloss 2x4", color: "Rød" },
+      { qty: 0, name: "Null", color: "Blå" },
+      { qty: 1, name: "  ", color: "Blå" },
+      { qty: 1.5, name: "Halv", color: "Blå" },
+      { qty: "3", name: "Tekst", color: "Blå" },
+      { name: "Uten antall", color: "Blå" },
+      null,
+    ];
+    const { analysis } = toPageAnalysis(
+      raw([step([0, 0, 500, 500], { parts }), step([500, 0, 1000, 500], { printed_number: 2, parts: [{ qty: -1, name: "x", color: "y" }] })], {
+        inventory: [{ qty: 4, name: "Plate", color: "Grå" }, { qty: 0, name: "Plate", color: "Grå" }],
+      }),
+    );
+    expect(analysis.steps[0]!.parts).toEqual([{ qty: 2, name: "Kloss 2x4", color: "Rød" }]);
+    expect(analysis.steps[1]!.parts).toEqual([]);
+    expect(analysis.inventory).toEqual([{ qty: 4, name: "Plate", color: "Grå" }]);
+  });
+
+  it("drops steps and spoilers with invalid boxes or numbers instead of throwing", () => {
+    const { analysis } = toPageAnalysis(
+      raw(
+        [
+          step([1, 2, 3] as never),
+          step([1, 2, 3, "x"] as never, { printed_number: 2 }),
+          step(null as never, { printed_number: 3 }),
+          step([0, 0, 500, 500], { printed_number: 0 }),
+          step([0, 0, 500, 500], { printed_number: 5 }),
+        ],
+        { spoilers: [{ box_2d: "nope", label: "x" }, { box_2d: [0, 0, 100, 100], label: "ok" }, { box_2d: [0, 0, 100, 100] }] },
+      ),
+    );
+    expect(analysis.steps.map((s) => s.printedNumber)).toEqual([5]);
+    expect(analysis.spoilers.map((s) => s.label)).toEqual(["ok"]);
+  });
+
+  it("rejects malformed AI output", () => {
+    expect(() => toPageAnalysis(raw([], { kind: "banana" }))).toThrow();
+  });
+});
+
+describe("toConstraints", () => {
+  it("toConstraints ignores unknown step ids", () => {
+    const out = toConstraints(
+      {
+        constraints: [
+          { kind: "stepOnDay", step_id: "a", day: 3 },
+          { kind: "stepOnDay", step_id: "zzz", day: 4 },
+          { kind: "stepLast", step_id: "b" },
+          { kind: "stepLast", step_id: "nope" },
+        ],
+      },
+      new Set(["a", "b"]),
+    );
+    expect(out).toEqual([
+      { kind: "stepOnDay", stepId: "a", day: 3 },
+      { kind: "stepLast", stepId: "b" },
+    ]);
+  });
+});
+
+describe("fakeAi", () => {
+  it("returns given pages and a synthetic default", async () => {
+    const ai = fakeAi({ 2: raw([]) });
+    expect(await ai.analyzePage(Buffer.alloc(0), 2)).toEqual(raw([]));
+    const cover = toPageAnalysis(await ai.analyzePage(Buffer.alloc(0), 1));
+    expect(cover.analysis.kind).toBe("cover");
+    expect(cover.setNumber).toBe("00000");
+    const p = toPageAnalysis(await ai.analyzePage(Buffer.alloc(0), 5));
+    expect(p.analysis.steps).toHaveLength(2);
+    expect(p.analysis.steps[0]!.parts).toHaveLength(3);
+  });
+});
+
+describe("RawPageAnalysis", () => {
+  it("rejects missing steps", () => {
+    expect(() => RawPageAnalysis.parse({ kind: "cover" })).toThrow();
+    expect(() => toPageAnalysis({ kind: "cover" })).toThrow();
+  });
+  it("swaps inverted boxes", () => {
+    const b = toPageAnalysis(raw([step([600, 700, 100, 200])])).analysis.steps[0]!.bbox;
+    expect(b.x).toBeCloseTo(0.2);
+    expect(b.y).toBeCloseTo(0.1);
+    expect(b.w).toBeCloseTo(0.5);
+  });
+  it("converts to JSON schema", () => {
+    expect(() => z.toJSONSchema(RawPageAnalysis)).not.toThrow();
+    expect(() => z.toJSONSchema(RawConstraints)).not.toThrow();
+  });
+});
+
+describe("Gemini response handling", () => {
+  const client = (res: object | Error) =>
+    ({ models: { generateContent: async () => { if (res instanceof Error) throw res; return res; } } }) as never;
+  const run = (res: object | Error) => vertexAi(client(res), { sleep: async () => {} }).analyzePage(Buffer.alloc(0), 7);
+  it("parses a good response", async () => {
+    expect(await run({ text: '{"a":1}', candidates: [{ finishReason: "STOP" }] })).toEqual({ a: 1 });
+  });
+  it("fails with context on empty, bad finish, bad JSON and SDK errors", async () => {
+    await expect(run({})).rejects.toThrow(/side 7: tomt svar/);
+    await expect(run({ text: "{}", candidates: [{ finishReason: "MAX_TOKENS" }] })).rejects.toThrow(/MAX_TOKENS/);
+    await expect(run({ text: "{oops" })).rejects.toMatchObject({ message: expect.stringMatching(/side 7: ugyldig JSON/), cause: expect.any(SyntaxError) });
+    const cause = new Error("net");
+    await expect(run(cause)).rejects.toMatchObject({ cause });
+  });
+});
