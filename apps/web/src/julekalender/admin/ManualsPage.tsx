@@ -5,6 +5,7 @@ import { ref, uploadBytesResumable } from "firebase/storage";
 import { Wishes, paths, storagePaths } from "@meling/shared";
 import { db, storage } from "../../firebase";
 import { deleteManual, redraft, retryManual } from "./api";
+import { useConfirm } from "./useConfirm";
 import { REDRAFT_CONFIRM, callableError, manualName, manualsChangedSincePlan, reorderedManuals } from "./plan-view";
 import { usePages } from "./usePages";
 import { useCalendar, type Manual } from "./useCalendar";
@@ -143,6 +144,7 @@ function CalendarManuals({ calId }: { calId: string }) {
   const [orderError, setOrderError] = useState<string | null>(null);
   const reorderingRef = useRef(false);
   const deletingRef = useRef(new Set<string>());
+  const { confirm, dialog } = useConfirm();
   const redraftingRef = useRef(false);
   const [redrafting, setRedrafting] = useState(false);
   const [redraftError, setRedraftError] = useState<string | null>(null);
@@ -266,9 +268,10 @@ function CalendarManuals({ calId }: { calId: string }) {
       .finally(() => setRetrying((r) => ({ ...r, [m.id]: false })));
   }
 
-  function remove(m: Manual) {
+  async function remove(m: Manual) {
     if (deletingRef.current.has(m.id)) return;
-    if (!window.confirm(`Slette ${manualName(m)}? Sidene og utklippene fra manualen slettes også.`)) return;
+    if (!(await confirm(`Slette ${manualName(m)}? Sidene og utklippene fra manualen slettes også.`, "Slett"))) return;
+    if (deletingRef.current.has(m.id)) return;
     deletingRef.current.add(m.id);
     setDeleting((d) => ({ ...d, [m.id]: true }));
     setRowErrors((r) => ({ ...r, [m.id]: "" }));
@@ -304,14 +307,14 @@ function CalendarManuals({ calId }: { calId: string }) {
     }
   }
 
-  function startRedraft() {
+  async function startRedraft() {
     if (!calendar || redraftingRef.current) return;
-    const ok = window.confirm(
+    const ok = await confirm(
       calendar.currentVersion !== null
         ? REDRAFT_CONFIRM
         : "AI-en beregner det den skjuler for barnet på nytt. Eventuelle endringer du har gjort i hva som skjules, kan gå tapt. Vil du fortsette?",
     );
-    if (!ok) return;
+    if (!ok || redraftingRef.current) return;
     redraftingRef.current = true;
     setRedrafting(true);
     setRedraftError(null);
@@ -351,6 +354,7 @@ function CalendarManuals({ calId }: { calId: string }) {
 
   return (
     <section className="manuals">
+      {dialog}
       {error && <p role="alert">{error}</p>}
 
       <ol className="stepper" aria-label="Fremgang">

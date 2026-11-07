@@ -336,6 +336,33 @@ button:disabled {
   color: #7a1f10;
 }
 
+/* Banners stay light in dark mode, so their buttons do too (dark surface + dark text is unreadable). */
+.banner button:not(.primary) {
+  background: #fff;
+  border-color: currentColor;
+}
+
+dialog.confirm {
+  max-width: 28rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+dialog.confirm::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+dialog.confirm p {
+  margin-top: 0;
+}
+
+dialog.confirm .toolbar {
+  justify-content: flex-end;
+}
+
 .dropzone {
   display: grid;
   justify-items: center;

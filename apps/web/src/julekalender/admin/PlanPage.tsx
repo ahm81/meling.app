@@ -13,6 +13,7 @@ import {
   manualsChangedSincePlan,
 } from "./plan-view";
 import { useCalendar } from "./useCalendar";
+import { useConfirm } from "./useConfirm";
 import { useCutouts } from "./useCutouts";
 import { usePages } from "./usePages";
 
@@ -27,6 +28,7 @@ export function PlanPage() {
   const [redrafting, setRedrafting] = useState(false);
   // Guards against double submits before React re-renders with busy = true.
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const versionNo = calendar?.currentVersion ?? null;
   // Only edit when the plan we show is the calendar's current version.
@@ -78,9 +80,9 @@ export function PlanPage() {
     }
   }
 
-  function startRedraft() {
+  async function startRedraft() {
     if (!calendar || redrafting) return;
-    if (!window.confirm(REDRAFT_CONFIRM)) return;
+    if (!(await confirm(REDRAFT_CONFIRM))) return;
     setRedrafting(true);
     setEditError(null);
     // Progress follows calendar.draft through the Firestore snapshot.
@@ -101,6 +103,7 @@ export function PlanPage() {
 
   return (
     <section className="plan">
+      {dialog}
       {error && <p role="alert">{error}</p>}
       {pagesError && <p role="alert">{pagesError}</p>}
 
