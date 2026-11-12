@@ -274,7 +274,7 @@ export async function computeDraft(db: Firestore, ai: Ai, calId: string, wishes:
       throw new Error("Gemini ønsker: svaret har feil format", { cause: e });
     }
   }
-  return { days: distributeWithFallback(steps, wishes.balance, constraints), hidden: aiHidden(pages) };
+  return { days: distributeWithFallback(steps, wishes.balance, constraints), hidden: aiHidden(pages), wholePages: [] };
 }
 
 /**

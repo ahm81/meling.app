@@ -163,7 +163,33 @@ export const summaries = {
   move: (no: number, from: number, to: number) => clip(`Flyttet trinn ${no} fra dag ${from} til dag ${to}`),
   hide: (label: string, page: number) => clip(`Skjulte ${quoteLabel(label)} på side ${page}`),
   show: (label: string) => clip(`Viste ${quoteLabel(label)} igjen`),
+  wholePage: (page: number, whole: boolean) =>
+    clip(whole ? `Viser side ${page} som ett bilde` : `Viser trinnene på side ${page} hver for seg`),
 };
+
+/** One picture in the child's view of a day: a step's cutout, or a whole page covering several steps. */
+export interface ChildImage {
+  key: string;
+  manualId: string;
+  page: number;
+  whole: boolean;
+  stepIds: string[];
+}
+
+/** The day's pictures in order; the steps of a whole page in effect (see wholePageSteps) become one picture. */
+export function childImages(daySteps: Step[], wholeStepIds: Map<string, string>): ChildImage[] {
+  const images: ChildImage[] = [];
+  for (const s of daySteps) {
+    const pageKey = wholeStepIds.get(s.id);
+    const last = images[images.length - 1];
+    if (pageKey && last?.whole && last.key === pageKey) {
+      last.stepIds.push(s.id);
+      continue;
+    }
+    images.push({ key: pageKey ?? s.id, manualId: s.manualId, page: s.page, whole: !!pageKey, stepIds: [s.id] });
+  }
+  return images;
+}
 
 /** Smallest region the picker accepts, as a fraction of the page side. */
 export const MIN_REGION = 0.02;

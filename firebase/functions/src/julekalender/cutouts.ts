@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { Bbox, Hidden, Step } from "@meling/shared";
 import sharp from "sharp";
 
-const FULL: Bbox = { x: 0, y: 0, w: 1, h: 1 };
+/** The whole page as a box. */
+export const FULL_PAGE: Bbox = { x: 0, y: 0, w: 1, h: 1 };
 
 /**
  * The hidden regions (or whole pages) that overlap the step's box, clipped to it and expressed
@@ -14,7 +15,7 @@ export function maskFor(step: Step, hidden: Hidden[]): Bbox[] {
   for (const h of hidden) {
     if (h.manualId !== step.manualId || h.page !== step.page) continue;
     if (h.bbox === null) {
-      masks.push({ ...FULL });
+      masks.push({ ...FULL_PAGE });
       continue;
     }
     const x0 = Math.max(s.x, h.bbox.x);

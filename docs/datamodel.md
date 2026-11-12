@@ -65,6 +65,8 @@ Versjoner er uforanderlige og skrives bare av functions; hver endring av fordeli
 - `author` er `{ kind: "adult", uid }` eller `{ kind: "ai", requestedBy: uid | null }`.
 - `plan` har `days` (nøyaktig 24, hver med `stepIds`) og `hidden` (skjulte områder: `id`, `manualId`, `page`, `bbox`
   eller `null` for hele siden, `label`, `source` `"ai"` eller `"adult"`). Trinn-id er `{manualId}:{side}:{indeks}`.
+  `wholePages` er sider barnet ser som ett bilde (`{ manualId, page }`), satt av en voksen. De gjelder bare mens alle
+  trinnene på siden er på samme dag, ellers vises trinnene hver for seg. Feltet mangler i eldre versjoner (betyr `[]`).
 - `restoredFrom` er nummeret versjonen ble gjenopprettet fra, ellers `null`.
 
 Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette dem):
@@ -87,7 +89,7 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 
 | Funksjon         | Gjør                                                                                         |
 | ---------------- | -------------------------------------------------------------------------------------------- |
-| `editPlan`       | `{ calendarId, baseVersion, ops, summary }`: flytter trinn eller skjuler/viser områder og lager en ny versjon |
+| `editPlan`       | `{ calendarId, baseVersion, ops, summary }`: flytter trinn, skjuler/viser områder eller slår hel side av/på, og lager en ny versjon |
 | `restoreVersion` | `{ calendarId, baseVersion, fromVersion }`: lager en ny versjon med planen til `fromVersion` og `restoredFrom` satt |
 | `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter). `baseVersion` er `null` når kalenderen ikke har noen versjon ennå (førsteutkastet feilet) |
 | `renderCutouts`  | `{ calendarId, version }`: lager utklippene til pakkelisten i Storage                        |
