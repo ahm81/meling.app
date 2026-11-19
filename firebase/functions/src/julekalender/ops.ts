@@ -11,11 +11,13 @@ export class InvalidOpError extends Error {
  * Applies edit operations in order and returns a new plan; the input is never mutated.
  * moveStep: only the first step of a day (to the day before) or the last (to the day after), and
  * the source day may not become empty. hide: the id must be new. show: the id must exist.
+ * wholePage: turning it on needs a page with steps that are all on one day; turning it off needs it to be on.
  */
 export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
   const known = new Set(steps.map((s) => s.id));
   const days = plan.days.map((d) => ({ stepIds: [...d.stepIds] }));
   let hidden = [...plan.hidden];
+  let wholePages = plan.wholePages.map((w) => ({ ...w }));
 
   for (const op of ops) {
     if (op.type === "moveStep") {
@@ -39,10 +41,26 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
     } else if (op.type === "hide") {
       if (hidden.some((h) => h.id === op.hidden.id)) throw new InvalidOpError("Området er allerede skjult.");
       hidden = [...hidden, structuredClone(op.hidden)];
-    } else {
+    } else if (op.type === "show") {
       if (!hidden.some((h) => h.id === op.hiddenId)) throw new InvalidOpError("Fant ikke det skjulte området.");
       hidden = hidden.filter((h) => h.id !== op.hiddenId);
+    } else {
+      const same = (w: { manualId: string; page: number }) => w.manualId === op.manualId && w.page === op.page;
+      const isOn = wholePages.some(same);
+      if (!op.whole) {
+        if (!isOn) throw new InvalidOpError(`Side ${op.page} vises ikke som hel side.`);
+        wholePages = wholePages.filter((w) => !same(w));
+        continue;
+      }
+      if (isOn) throw new InvalidOpError(`Side ${op.page} vises allerede som hel side.`);
+      const onPage = steps.filter(same).map((s) => s.id);
+      if (onPage.length === 0) throw new InvalidOpError(`Side ${op.page} har ingen trinn.`);
+      const dayIdx = new Set(onPage.map((id) => days.findIndex((d) => d.stepIds.includes(id))));
+      if (dayIdx.size !== 1 || dayIdx.has(-1)) {
+        throw new InvalidOpError(`Trinnene på side ${op.page} er fordelt på flere dager, så siden kan ikke vises som ett bilde.`);
+      }
+      wholePages = [...wholePages, { manualId: op.manualId, page: op.page }];
     }
   }
-  return { days, hidden };
+  return { days, hidden, wholePages };
 }

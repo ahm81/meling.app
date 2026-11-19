@@ -29,7 +29,7 @@ const db = getFirestore(app);
 const bucket = getStorage(app).bucket();
 afterAll(() => deleteApp(app));
 
-const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [] });
+const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [] });
 
 async function seedCalendar(overrides: Partial<CalendarDoc> = {}): Promise<string> {
   const calId = `2026-${randomUUID()}`;
@@ -586,6 +586,45 @@ describe("callables", () => {
       await expect(renderCutoutsHandler(deps(), as("ida", { calendarId: calId, version: 2 }))).rejects.toMatchObject({
         code: "permission-denied",
       });
+    });
+
+    it("renders a whole page once, masked, for all its steps", async () => {
+      const calId = await drafted();
+      const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: "#ffffff" } }).png().toBuffer();
+      for (let page = 1; page <= 13; page++) await bucket.file(storagePaths.pageImage(calId, "m1", page)).save(png);
+      // One step per day: page 2's two steps are days 1 and 2. Version 2 puts both on day 1.
+      const v1 = (await version(calId, 1)).plan as Plan;
+      expect(v1.days.slice(0, 2).map((d) => d.stepIds)).toEqual([["m1:2:0"], ["m1:2:1"]]);
+      const days = v1.days.map((d) => ({ stepIds: [...d.stepIds] }));
+      days[0] = { stepIds: ["m1:2:0", "m1:2:1"] };
+      days[1] = { stepIds: [] };
+      await writeVersion(db, calId, { baseVersion: 1, author: { kind: "adult", uid: "amund" }, summary: "x", plan: { ...v1, days } });
+      await editPlanHandler(
+        deps(),
+        as("amund", {
+          calendarId: calId,
+          baseVersion: 2,
+          ops: [
+            { type: "hide", hidden: adultHide },
+            { type: "wholePage", manualId: "m1", page: 2, whole: true },
+          ],
+          summary: "x",
+        }),
+      );
+
+      const { cutouts } = await renderCutoutsHandler(deps(), as("amund", { calendarId: calId, version: 3 }));
+      const whole = cutouts["m1:2:0"]!;
+      expect(whole).toMatch(new RegExp(`^julekalender/${calId}/cutouts/m1:2:page/[0-9a-f]{12}\\.webp$`));
+      expect(cutouts["m1:2:1"]).toBe(whole);
+      expect(cutouts["m1:3:0"]).toBe(storagePaths.cutout(calId, "m1:3:0", "none"));
+
+      const [file] = await bucket.file(whole).download();
+      const { data, info } = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      expect(info).toMatchObject({ width: 200, height: 100 });
+      const at = (x: number, y: number) => [...data.subarray((y * info.width + x) * 3, (y * info.width + x) * 3 + 3)];
+      const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]!) <= 6);
+      expect(near(at(20, 20), [0xc2, 0xc8, 0xcc])).toBe(true); // hidden: x 0–50, y 0–50
+      expect(near(at(150, 80), [255, 255, 255])).toBe(true);
     });
   });
 });

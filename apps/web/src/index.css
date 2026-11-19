@@ -695,6 +695,30 @@ button[aria-pressed="true"] {
   background: #fff;
 }
 
+.cutout.whole {
+  flex-basis: 20rem;
+}
+
+.whole-pages {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.whole-pages legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+
+.whole-pages .check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .cutout-empty {
   aspect-ratio: 4 / 3;
   display: grid;

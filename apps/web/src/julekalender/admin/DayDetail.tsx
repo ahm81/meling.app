@@ -1,8 +1,18 @@
 import { useMemo, useState } from "react";
-import { packingList, storagePaths, type Hidden, type PageDoc, type Plan, type PlanOp, type Step } from "@meling/shared";
+import {
+  packingList,
+  storagePaths,
+  wholePageSteps,
+  type Hidden,
+  type PageDoc,
+  type Plan,
+  type PlanOp,
+  type Step,
+} from "@meling/shared";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
+  childImages,
   dayOfStep,
   hiddenOnPage,
   manualName,
@@ -65,6 +75,17 @@ export function DayDetail({
   const manualById = useMemo(() => new Map(manuals.map((m) => [m.id, m])), [manuals]);
   const todayIds = useMemo(() => new Set(row.steps.map((s) => s.id)), [row.steps]);
   const moves = moveOptions(plan, day);
+  // stepId → "manualId/page" for the steps of whole pages in effect today.
+  const wholeStepIds = useMemo(
+    () =>
+      new Map(
+        wholePageSteps(plan, steps)
+          .filter((w) => w.day === day)
+          .flatMap((w) => w.stepIds.map((id) => [id, `${w.manualId}/${w.page}`] as const)),
+      ),
+    [plan, steps, day],
+  );
+  const images = useMemo(() => childImages(row.steps, wholeStepIds), [row.steps, wholeStepIds]);
 
   const imagePaths = dayPages.map((p) => storagePaths.pageImage(calId, p.manualId, p.page));
   const cutoutPaths = row.steps.flatMap((s) => cutouts.cutouts[s.id] ?? []);
@@ -92,6 +113,10 @@ export function DayDetail({
   function move(stepId: string, toDay: number) {
     const step = index.byId.get(stepId);
     void onEdit([{ type: "moveStep", stepId, toDay }], summaries.move(step ? stepNo(step, index) : 0, day, toDay));
+  }
+
+  function setWhole(manualId: string, page: number, whole: boolean) {
+    void onEdit([{ type: "wholePage", manualId, page, whole }], summaries.wholePage(page, whole));
   }
 
   function show(h: Hidden) {
@@ -226,21 +251,45 @@ export function DayDetail({
           )
         )}
         <div className={`cutouts${cutoutsCurrent ? "" : " stale"}`}>
-          {row.steps.map((s) => {
-            const path = cutouts.cutouts[s.id];
+          {images.map((img, i) => {
+            const path = cutouts.cutouts[img.stepIds[0]!];
             const url = path ? urls[path] : null;
+            const caption = `Bilde ${i + 1} · ${pageLabel(img.manualId, img.page).toLowerCase()}${img.whole ? " (hele siden)" : ""}`;
             return (
-              <figure key={s.id} className="cutout">
+              <figure key={img.key} className={`cutout${img.whole ? " whole" : ""}`}>
                 {url ? (
-                  <img src={url} alt={`Trinn ${stepNo(s, index)} slik barnet ser det`} />
+                  <img src={url} alt={`${caption}, slik barnet ser det`} />
                 ) : (
                   <div className="cutout-empty muted small">{cutouts.loading ? "Lager …" : "Ikke klar"}</div>
                 )}
-                <figcaption className="small">Trinn {stepNo(s, index)}</figcaption>
+                <figcaption className="small">{caption}</figcaption>
               </figure>
             );
           })}
         </div>
+        <fieldset className="whole-pages">
+          <legend className="small muted">Vis en side som ett bilde i stedet for ett bilde per trinn</legend>
+          {dayPages.map(({ manualId, page }) => {
+            const on = plan.wholePages.some((w) => w.manualId === manualId && w.page === page);
+            const split = steps.some((s) => s.manualId === manualId && s.page === page && !todayIds.has(s.id));
+            return (
+              <label key={pageKey(manualId, page)} className="check">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={busy || (split && !on)}
+                  onChange={(e) => setWhole(manualId, page, e.target.checked)}
+                />
+                {pageLabel(manualId, page)}
+                {split && (
+                  <span className="muted small">
+                    {on ? " (gjelder ikke nå: trinnene er fordelt på flere dager)" : " (trinnene er fordelt på flere dager)"}
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </fieldset>
       </div>
 
       <div className="cards">

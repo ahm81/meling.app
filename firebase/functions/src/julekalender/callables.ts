@@ -1,10 +1,10 @@
-import { CalendarDoc, type Hidden, Plan, PlanOp, type Step, paths, storagePaths } from "@meling/shared";
+import { CalendarDoc, type Hidden, Plan, PlanOp, type Step, paths, storagePaths, wholePageSteps } from "@meling/shared";
 import { type DocumentSnapshot, FieldValue, type Firestore, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { z } from "zod";
-import { maskFor, maskKey, renderCutout } from "./cutouts";
+import { FULL_PAGE, maskFor, maskKey, renderCutout } from "./cutouts";
 import { aiFromEnv } from "./gemini";
 import { InvalidOpError, applyOps } from "./ops";
 import {
@@ -137,7 +137,8 @@ const RedraftInput = z.object({ calendarId: Id, baseVersion: z.int().min(1).null
 
 /**
  * Runs the AI draft again with the current wishes and writes it as a new version. Regions the adults hid
- * in the base version are kept; the AI's own hidden regions are replaced by the new draft's.
+ * in the base version are kept, and so are its whole pages (they fall back to cutouts if the new draft splits
+ * the page); the AI's own hidden regions are replaced by the new draft's.
  * Allowed when the draft is done or failed, or has been "running" for more than 15 minutes.
  */
 export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequest): Promise<{ version: number }> {
@@ -173,7 +174,7 @@ export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequ
       baseVersion,
       author: { kind: "ai", requestedBy: uid },
       summary: "Nytt utkast fra AI",
-      plan: { days: draft.days, hidden: [...draft.hidden, ...kept] },
+      plan: { days: draft.days, hidden: [...draft.hidden, ...kept], wholePages: base?.wholePages ?? [] },
     });
     await calRef.update({ draft: "done", draftError: null, draftUpdatedAt: FieldValue.serverTimestamp() });
     return { version };
@@ -279,7 +280,8 @@ const RenderCutoutsInput = z.object({ calendarId: Id, version: z.int().min(1) })
 
 /**
  * Makes the missing cutouts for every step in a version: the page image cropped to the step, with the
- * version's hidden regions painted grey. Returns the Storage path of every step's cutout.
+ * version's hidden regions painted grey. Returns the Storage path of every step's cutout. The steps of a
+ * whole page (plan.wholePages, all its steps on one day) share one cutout: the whole page, masked.
  */
 export async function renderCutoutsHandler(
   { db, bucket }: CallableDeps,
@@ -290,16 +292,22 @@ export async function renderCutoutsHandler(
   const [plan, { steps }] = await Promise.all([readPlan(db, calendarId, version), loadSteps(db, calendarId)]);
   const byId = new Map(steps.map((s) => [s.id, s]));
 
+  const wholeIds = new Map(wholePageSteps(plan, steps).map(({ manualId, page, stepIds }) => [`${manualId}/${page}`, stepIds]));
+
   const byPage = new Map<string, { step: Step; path: string; masks: ReturnType<typeof maskFor> }[]>();
   const cutouts: Record<string, string> = {};
   for (const id of plan.days.flatMap((d) => d.stepIds)) {
     const step = byId.get(id);
     if (!step) throw new HttpsError("failed-precondition", `Fant ikke trinnet ${id}.`);
-    const masks = maskFor(step, plan.hidden);
-    const path = storagePaths.cutout(calendarId, id, maskKey(masks));
-    cutouts[id] = path;
     const key = `${step.manualId}/${step.page}`;
-    byPage.set(key, [...(byPage.get(key) ?? []), { step, path, masks }]);
+    const whole = wholeIds.has(key);
+    // A whole page is rendered once, as a pseudo step covering the page.
+    const target: Step = whole ? { ...step, id: `${step.manualId}:${step.page}:page`, bbox: FULL_PAGE } : step;
+    const masks = maskFor(target, plan.hidden);
+    const path = storagePaths.cutout(calendarId, target.id, maskKey(masks));
+    cutouts[id] = path;
+    const items = byPage.get(key) ?? [];
+    if (!items.some((i) => i.path === path)) byPage.set(key, [...items, { step: target, path, masks }]);
   }
 
   await forEachLimited([...byPage.values()], MAX_CONCURRENT_PAGES, async (items) => {

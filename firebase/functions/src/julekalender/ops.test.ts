@@ -20,7 +20,7 @@ const makePlan = (): { plan: Plan; steps: Step[] } => {
   days[4] = { stepIds: ["a", "b", "c"] };
   days[5] = { stepIds: ["d"] };
   const ids = days.flatMap((d) => d.stepIds);
-  return { plan: { days, hidden: [] }, steps: ids.map(step) };
+  return { plan: { days, hidden: [], wholePages: [] }, steps: ids.map(step) };
 };
 
 const hidden: Hidden = { id: "h1", manualId: "m1", page: 2, bbox: null, label: "Forside", source: "adult" };
@@ -124,5 +124,45 @@ describe("applyOps", () => {
     const out = applyOps(plan, steps, [{ type: "hide", hidden: h }]);
     h.label = "endret";
     expect(out.hidden[0]!.label).toBe("Forside");
+  });
+
+  describe("wholePage", () => {
+    // a, b, c (day 5) are on page 3; c and d (days 5 and 6) on page 4 would split it, so d is put there too.
+    const onPages = (steps: Step[]) =>
+      steps.map((s) => (["a", "b"].includes(s.id) ? { ...s, page: 3 } : ["c", "d"].includes(s.id) ? { ...s, page: 4 } : s));
+
+    it("turns a page into one image when all its steps are on one day, and back", () => {
+      const { plan, steps } = makePlan();
+      const on = applyOps(plan, onPages(steps), [{ type: "wholePage", manualId: "m1", page: 3, whole: true }]);
+      expect(on.wholePages).toEqual([{ manualId: "m1", page: 3 }]);
+      expect(on.days).toEqual(plan.days);
+      const off = applyOps(on, onPages(steps), [{ type: "wholePage", manualId: "m1", page: 3, whole: false }]);
+      expect(off.wholePages).toEqual([]);
+    });
+
+    it("rejects a page whose steps are on several days", () => {
+      const { plan, steps } = makePlan();
+      expect(() => applyOps(plan, onPages(steps), [{ type: "wholePage", manualId: "m1", page: 4, whole: true }])).toThrow(
+        "fordelt på flere dager",
+      );
+    });
+
+    it("rejects a page without steps, turning it on twice, and turning off a page that is not on", () => {
+      const { plan, steps } = makePlan();
+      const s = onPages(steps);
+      const op = (page: number, whole: boolean) => ({ type: "wholePage" as const, manualId: "m1", page, whole });
+      expect(() => applyOps(plan, s, [op(9, true)])).toThrow("har ingen trinn");
+      expect(() => applyOps(plan, s, [op(3, true), op(3, true)])).toThrow("allerede");
+      expect(() => applyOps(plan, s, [op(3, false)])).toThrow(InvalidOpError);
+    });
+
+    it("keeps the pages of the input plan and does not mutate it", () => {
+      const { plan, steps } = makePlan();
+      const withPage: Plan = { ...plan, wholePages: [{ manualId: "m1", page: 3 }] };
+      const copy = structuredClone(withPage);
+      const out = applyOps(withPage, onPages(steps), [{ type: "moveStep", stepId: "c", toDay: 6 }]);
+      expect(out.wholePages).toEqual([{ manualId: "m1", page: 3 }]);
+      expect(withPage).toEqual(copy);
+    });
   });
 });

@@ -52,16 +52,43 @@ export const Hidden = z.object({
 });
 export type Hidden = z.infer<typeof Hidden>;
 
+// A page the child sees as one image (the whole page, hidden regions painted over) instead of one cutout
+// per step. Only used while all the page's steps are on the same day; otherwise the steps are shown one by one.
+export const WholePage = z.object({ manualId: z.string(), page: z.int().min(1) });
+export type WholePage = z.infer<typeof WholePage>;
+
 export const Plan = z.object({
   days: z.array(z.object({ stepIds: z.array(z.string()) })).length(DOOR_COUNT),
   hidden: z.array(Hidden),
+  // Missing in versions written before whole pages existed.
+  wholePages: z.array(WholePage).default([]),
 });
 export type Plan = z.infer<typeof Plan>;
+
+/**
+ * The plan's whole pages that are in effect: the page has steps and all of them are on one day.
+ * `day` is 1-based; `stepIds` are in the day's order. Pages split over days are left out.
+ */
+export function wholePageSteps(
+  plan: Plan,
+  steps: Step[],
+): { manualId: string; page: number; day: number; stepIds: string[] }[] {
+  const dayOf = new Map(plan.days.flatMap((d, i) => d.stepIds.map((id) => [id, i + 1] as const)));
+  return plan.wholePages.flatMap(({ manualId, page }) => {
+    const onPage = new Set(steps.filter((s) => s.manualId === manualId && s.page === page).map((s) => s.id));
+    const days = new Set([...onPage].map((id) => dayOf.get(id)));
+    if (onPage.size === 0 || days.size !== 1) return [];
+    const day = [...days][0];
+    if (day === undefined) return [];
+    return [{ manualId, page, day, stepIds: plan.days[day - 1]!.stepIds.filter((id) => onPage.has(id)) }];
+  });
+}
 
 export const PlanOp = z.discriminatedUnion("type", [
   z.object({ type: z.literal("moveStep"), stepId: z.string(), toDay: z.int().min(1).max(DOOR_COUNT) }),
   z.object({ type: z.literal("hide"), hidden: Hidden }),
   z.object({ type: z.literal("show"), hiddenId: z.string() }),
+  z.object({ type: z.literal("wholePage"), manualId: z.string(), page: z.int().min(1), whole: z.boolean() }),
 ]);
 export type PlanOp = z.infer<typeof PlanOp>;
 
