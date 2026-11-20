@@ -209,7 +209,7 @@ export interface ReadBricks {
   pages: Map<string, { manualId: string; page: number; inventory: InventoryBrick[]; callouts: Omit<BrickCallout, "stepIndex">[] }>;
   /** elementId → WebP picture from the parts list. */
   images: Map<string, Buffer>;
-  /** WebP pictures of the parts box bricks whose match is uncertain. */
+  /** WebP pictures of the matched parts box bricks, so an adult can check or correct a match. */
   calloutImages: { manualId: string; page: number; index: number; webp: Buffer }[];
 }
 
@@ -259,7 +259,7 @@ export async function readBricks(manuals: { manualId: string; pdf: Buffer }[]): 
     const match = matches[i];
     if (!match) return;
     Object.assign(entry.callouts[c.index]!, match);
-    if (!match.sure) out.calloutImages.push({ manualId: entry.manualId, page: entry.page, index: c.index, webp: c.webp });
+    out.calloutImages.push({ manualId: entry.manualId, page: entry.page, index: c.index, webp: c.webp });
   });
   if (inventory.length > 0) {
     const expected = new Map<string, number>();
@@ -316,5 +316,6 @@ export async function updateBricks({ db, bucket }: Pick<PipelineDeps, "db" | "bu
     void writer.update(db.doc(paths.page(calId, doc.data.manualId, doc.data.page)), { bricks });
   }
   await writer.close();
-  return { elements: read.images.size, unsure: read.calloutImages.length };
+  const unsure = [...read.pages.values()].reduce((n, p) => n + p.callouts.filter((c) => !c.sure).length, 0);
+  return { elements: read.images.size, unsure };
 }

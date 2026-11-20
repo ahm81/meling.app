@@ -84,7 +84,7 @@ Versjoner er uforanderlige og skrives bare av functions; hver endring av fordeli
   `extraBricks` er brikker en voksen har lagt i en pose for hånd (`{ elementId, day, qty }`, høyst én per brikke og
   dag): brikker delelisten har, men som ingen brikkeboks viser, for eksempel figurdeler. De teller med i posen og i
   kontrollen mot delelisten, og beholdes når AI-en lager et nytt utkast. Feltet mangler i eldre versjoner (betyr `[]`).
-  `brickFixes` er de voksnes svar på hvilken brikke en usikker brikkeboks-linje egentlig er
+  `brickFixes` er de voksnes svar på hvilken brikke en brikkeboks-linje egentlig er (usikre treff, eller sikre som er feil)
   (`{ manualId, page, index, elementId }`, der `index` er plassen i sidens `bricks.callouts`). Svaret erstatter det
   automatiske treffet og gjør linjen sikker. Beholdes også ved nytt utkast, og feltet mangler i eldre versjoner.
 - `restoredFrom` er nummeret versjonen ble gjenopprettet fra, ellers `null`.
@@ -129,8 +129,8 @@ Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for 
 - `julekalender/{calId}/cutouts/{stepId}/{maskKey}.webp`: utklipp til pakkelisten (functions). `cutoutsDir` er
   `cutouts/`.
 - `julekalender/{calId}/bricks/{elementId}.webp`: bildet av en brikke fra delelisten (functions).
-  `julekalender/{calId}/bricks/callouts/{manualId}/{side}_{indeks}.webp` er bildet fra brikkeboksen for brikker med
-  usikkert treff (`indeks` er plassen i sidens `bricks.callouts`). `bricksDir` er `bricks/`, som tømmes og fylles på
+  `julekalender/{calId}/bricks/callouts/{manualId}/{side}_{indeks}.webp` er bildet fra brikkeboksen for hver brikke,
+  så en voksen kan kontrollere eller rette treffet (`indeks` er plassen i sidens `bricks.callouts`). `bricksDir` er `bricks/`, som tømmes og fylles på
   nytt hver gang brikkene leses.
 - `julekalender/{calId}/**` utenom manualene: voksne leser, ingen skriver fra klient (bare functions).
 - Stiene bygges av `storagePaths` i `packages/shared`. Storage-regler kan ikke kalle `isAdult()`; de leser

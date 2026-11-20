@@ -57,10 +57,12 @@ export function BrickBagList({
   /** Lets an adult say which brick an uncertain entry is (elementId null takes the answer back). */
   fix?: {
     choices: BrickChoices;
-    onFix: (callout: PlacedCallout, elementId: string | null) => void;
+    onFix: (callouts: PlacedCallout[], elementId: string | null) => void;
   };
 }) {
-  const [picking, setPicking] = useState<PlacedCallout | null>(null);
+  const [picking, setPicking] = useState<PlacedCallout[] | null>(null);
+  // The entries behind a line that have not been corrected yet (a sure match can still be wrong).
+  const behind = (elementId: string) => bag.sure.filter((c) => c.elementId === elementId && !c.fixed);
   const urls = useDownloadUrls([
     ...bag.lines.map((l) => storagePaths.brickImage(calId, l.elementId)),
     ...bag.unsure.map((c) => calloutPath(calId, c)),
@@ -85,7 +87,17 @@ export function BrickBagList({
             }
             tick={tick}
           >
-            {l.extra > 0 && onRemove && (
+            {fix && behind(l.elementId).length > 0 && (
+            <button
+              className="link-button no-print"
+              disabled={busy}
+              title="Feil brikke? Velg den riktige"
+              onClick={() => setPicking(behind(l.elementId))}
+            >
+              Rett
+            </button>
+          )}
+          {l.extra > 0 && onRemove && (
               <button
                 className="link-button no-print"
                 disabled={busy}
@@ -109,7 +121,7 @@ export function BrickBagList({
               <button
                 className="link-button no-print"
                 disabled={busy}
-                onClick={() => setPicking(c)}
+                onClick={() => setPicking([c])}
               >
                 Rett
               </button>
@@ -138,7 +150,7 @@ export function BrickBagList({
               <button
                 className="link-button"
                 disabled={busy}
-                onClick={() => fix.onFix(c, null)}
+                onClick={() => fix.onFix([c], null)}
               >
                 Angre
               </button>
@@ -148,12 +160,13 @@ export function BrickBagList({
       {fix && picking && (
         <BrickPicker
           calId={calId}
-          callout={picking}
-          calloutUrl={urls[calloutPath(calId, picking)]}
+          callouts={picking}
           choices={fix.choices}
           onPick={(elementId) => {
             setPicking(null);
-            if (elementId) fix.onFix(picking, elementId);
+            // Choosing what a sure line already is changes nothing.
+            const same = picking.every((c) => c.sure && c.elementId === elementId);
+            if (elementId && !same) fix.onFix(picking, elementId);
           }}
         />
       )}
@@ -170,14 +183,13 @@ export interface BrickChoices {
 /** A dialog that asks which brick an uncertain parts box entry is. `onPick(null)` means cancelled. */
 function BrickPicker({
   calId,
-  callout,
-  calloutUrl,
+  callouts,
   choices,
   onPick,
 }: {
   calId: string;
-  callout: PlacedCallout;
-  calloutUrl: string | null | undefined;
+  /** The entries to correct together: at least one, all with the same current match. */
+  callouts: PlacedCallout[];
   choices: BrickChoices;
   onPick: (elementId: string | null) => void;
 }) {
@@ -185,9 +197,11 @@ function BrickPicker({
   useEffect(() => {
     if (ref.current && !ref.current.open) ref.current.showModal();
   }, []);
-  const urls = useDownloadUrls(
-    choices.all.map((id) => storagePaths.brickImage(calId, id)),
-  );
+  const callout = callouts[0]!;
+  const pagesText = [...new Set(callouts.map((c) => c.page))].join(", ");
+  // Pictures of sure entries exist once the bricks have been read again; without one the head has no picture.
+  const calloutUrl = useDownloadUrls([calloutPath(calId, callout)])[calloutPath(calId, callout)];
+  const urls = useDownloadUrls(choices.all.map((id) => storagePaths.brickImage(calId, id)));
   const grid = (ids: string[]) => (
     <div className="brick-choices">
       {ids.map((id) => (
@@ -221,12 +235,12 @@ function BrickPicker({
           <strong>Hvilken brikke er dette?</strong>
           <br />
           <span className="muted small">
-            Fra brikkeboksen på side {callout.page}. Appen gjettet{" "}
-            {callout.elementId}.
+            Fra brikkeboksen på side {pagesText}. Appen mente {callout.elementId}.
+            {callouts.length > 1 && ` Gjelder ${callouts.length} brikkebokser i denne posen.`}
           </span>
         </p>
       </div>
-      <h4>Gjetningen</h4>
+      <h4>Appens valg</h4>
       {grid([callout.elementId])}
       {choices.missing.length > 0 && (
         <>
@@ -287,4 +301,11 @@ export function UnplacedBricks({
       ))}
     </div>
   );
+}
+
+/** The version summary for correcting (or taking back the correction of) parts box entries. */
+export function fixSummary(callouts: PlacedCallout[], elementId: string | null): string {
+  const pages = [...new Set(callouts.map((c) => c.page))].join(", ");
+  const what = callouts.length === 1 ? "en brikke" : `${callouts.length} brikker`;
+  return elementId ? `Rettet ${what} på side ${pages} til ${elementId}` : `Angret rettingen av ${what} på side ${pages}`;
 }

@@ -12,7 +12,7 @@ import {
   type PlanOp,
   type Step,
 } from "@meling/shared";
-import { BrickBagList, UnplacedBricks } from "./Bricks";
+import { BrickBagList, UnplacedBricks, fixSummary } from "./Bricks";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
@@ -318,10 +318,10 @@ export function DayDetail({
                 busy={busy}
                 fix={{
                   choices: { missing: unplaced.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
-                  onFix: ({ manualId, page, index }, elementId) =>
+                  onFix: (callouts, elementId) =>
                     void onEdit(
-                      [{ type: "fixBrick", manualId, page, index, elementId }],
-                      elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+                      callouts.map(({ manualId, page, index }) => ({ type: "fixBrick", manualId, page, index, elementId })),
+                      fixSummary(callouts, elementId),
                     ),
                 }}
                 onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}

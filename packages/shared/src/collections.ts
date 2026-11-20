@@ -26,7 +26,7 @@ export const storagePaths = {
   // The picture of a brick from the parts list, one per element id in the calendar.
   brickImage: (calId: string, elementId: string) =>
     `${Collections.julekalender}/${calId}/bricks/${elementId}.webp`,
-  // The picture of one brick in a step's parts box (only stored for uncertain matches). `index` is its
+  // The picture of one brick in a step's parts box, so an adult can check or correct its match. `index` is its
   // position in the page's `bricks.callouts`.
   calloutImage: (calId: string, manualId: string, page: number, index: number) =>
     `${Collections.julekalender}/${calId}/bricks/callouts/${manualId}/${page}_${index}.webp`,
