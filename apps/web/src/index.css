@@ -1075,3 +1075,125 @@ details summary {
 .history-diff ul {
   margin: 0.25rem 0;
 }
+
+/* Julekalender admin: forhåndsvisning av barnets kalender */
+.preview {
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+}
+
+.preview-notice {
+  justify-self: stretch;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* The child's view is made for a phone, so the preview keeps that width. */
+.child-frame {
+  width: min(26rem, 100%);
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1rem 1.5rem;
+  border-radius: 24px;
+  background: #14382b;
+  color: #fdf6e3;
+}
+
+.child-title {
+  margin: 0.25rem 0 0;
+  text-align: center;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.75rem;
+}
+
+.doors {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+.door {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid #e2b857;
+  border-radius: 12px;
+  background: #a3262a;
+  color: #fdf6e3;
+}
+
+.door.done {
+  background: #1f5c45;
+  border-style: dashed;
+}
+
+.door-number {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.door-done {
+  position: absolute;
+  bottom: 4px;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.door-head {
+  justify-self: center;
+  width: 5.5rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid #e2b857;
+  border-radius: 16px;
+  background: #a3262a;
+}
+
+.door-head .door-number {
+  font-size: 2.5rem;
+}
+
+.door-images {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.door-images img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.door-finish {
+  justify-self: center;
+  min-height: 52px;
+  padding: 0 1.75rem;
+  border: 0;
+  border-radius: 26px;
+  background: #e2b857;
+  color: #14382b;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.preview-nav {
+  justify-content: center;
+}
+
+.door-retry {
+  background: #fdf6e3;
+  color: #14382b;
+  border: 0;
+}

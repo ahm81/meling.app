@@ -9,6 +9,7 @@ import { HistoryPage } from "./julekalender/admin/HistoryPage";
 import { ManualsPage } from "./julekalender/admin/ManualsPage";
 import { Overview } from "./julekalender/admin/Overview";
 import { PackingListPrint } from "./julekalender/admin/PackingListPrint";
+import { PreviewPage } from "./julekalender/admin/PreviewPage";
 import { PlanPage } from "./julekalender/admin/PlanPage";
 
 type Access =
@@ -123,6 +124,7 @@ export function App() {
             <Route path="fordeling" element={<PlanPage />} />
             <Route path="historikk" element={<HistoryPage />} />
             <Route path="pakkeliste" element={<PackingListPrint />} />
+            <Route path="forhandsvisning" element={<PreviewPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
