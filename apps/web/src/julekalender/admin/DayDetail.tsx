@@ -12,7 +12,7 @@ import {
   type PlanOp,
   type Step,
 } from "@meling/shared";
-import { BrickBagList } from "./Bricks";
+import { BrickBagList, UnplacedBricks } from "./Bricks";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
@@ -327,25 +327,21 @@ export function DayDetail({
                 onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}
               />
               {unplaced.length > 0 && (
-                <label className="place-here">
-                  <span className="muted small">Brikker som ikke ligger i noen pose</span>
-                  <select
-                    value=""
-                    disabled={busy}
-                    onChange={(e) => {
-                      const elementId = e.target.value;
+                <div className="place-here no-print">
+                  <strong className="small">Brikker som ikke ligger i noen pose</strong>
+                  <span className="muted small">
+                    Trykk på en brikke som bygges denne dagen (se sidene over) for å legge den i posen.
+                  </span>
+                  <UnplacedBricks
+                    calId={calId}
+                    bricks={unplaced.map((d) => ({ elementId: d.elementId, left: d.expected - d.distributed }))}
+                    busy={busy}
+                    onPlace={(elementId) => {
                       const placed = extras.find((b) => b.elementId === elementId)?.qty ?? 0;
-                      if (elementId) placeBrick(elementId, placed + 1, `La 1× ${elementId} i pose ${day}`);
+                      placeBrick(elementId, placed + 1, `La 1× ${elementId} i pose ${day}`);
                     }}
-                  >
-                    <option value="">Legg en brikke i denne posen …</option>
-                    {unplaced.map((d) => (
-                      <option key={d.elementId} value={d.elementId}>
-                        {d.elementId} ({d.expected - d.distributed} igjen)
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
               )}
             </>
           ) : parts.length === 0 ? (
