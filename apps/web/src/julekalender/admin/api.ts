@@ -39,3 +39,10 @@ export const deleteManual = httpsCallable<{ calendarId: string; manualId: string
   "deleteManual",
   long,
 );
+
+// Reads pictures and element ids from the manuals' PDFs (no AI). The result arrives through the page snapshots too.
+export const readBricks = httpsCallable<{ calendarId: string }, { elements: number; unsure: number }>(
+  functions,
+  "readBricks",
+  long,
+);

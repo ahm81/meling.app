@@ -16,6 +16,7 @@ import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { toConstraints, toPageAnalysis } from "./analysis";
+import { updateBricks } from "./bricks";
 import { type Constraint, TooFewBrickStepsError, TooFewStepsError, UNSATISFIABLE, distribute } from "./distribute";
 import { type Ai, aiFromEnv } from "./gemini";
 import { PdfReadError, renderPdf } from "./pdf";
@@ -165,6 +166,21 @@ export async function processClaimedManual({ db, bucket, ai }: PipelineDeps, cal
     await draftIfAllManualsDone(db, ai, calId);
   } catch (e) {
     logger.error("Could not start the first draft", { calId, manualId, error: e });
+  }
+  await updateBricksIfAllManualsDone({ db, bucket }, calId);
+}
+
+/**
+ * Reads the bricks (pictures and element ids) once every manual is done. Never throws: the packing list
+ * works without them, and the adults can run it again with readBricks.
+ */
+export async function updateBricksIfAllManualsDone(deps: Pick<PipelineDeps, "db" | "bucket">, calId: string): Promise<void> {
+  try {
+    const manuals = await manualsOf(deps.db, calId).get();
+    if (manuals.empty || !manuals.docs.every((m) => m.get("status") === "done")) return;
+    await updateBricks(deps, calId);
+  } catch (e) {
+    logger.error("Could not read the bricks", { calId, error: e });
   }
 }
 

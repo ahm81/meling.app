@@ -762,6 +762,83 @@ button[aria-pressed="true"] {
   visibility: hidden;
 }
 
+.brick-image {
+  flex: none;
+  width: 44px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.brick-image img {
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  object-fit: contain;
+}
+
+.brick-id {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.brick-grid .part-name {
+  flex: none;
+}
+
+.brick-bags {
+  flex: 1 1 auto;
+  font-weight: 400;
+  text-align: right;
+}
+
+.tick {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--muted);
+  border-radius: 3px;
+}
+
+.brick-grid,
+.brick-columns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
+  gap: 0.5rem 1.5rem;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.segmented button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  color: inherit;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+
 .reconcile {
   display: grid;
   gap: 0.5rem;

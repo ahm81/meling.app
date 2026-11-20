@@ -1,4 +1,4 @@
-import { type PageAnalysis, type Step, stepId } from "./julekalender";
+import { type Bbox, type PageAnalysis, type Step, stepId } from "./julekalender";
 
 type StepBox = PageAnalysis["steps"][number];
 
@@ -34,4 +34,23 @@ export function orderSteps(
         brickCount: s.parts.reduce((n, p) => n + p.qty, 0),
       })),
     );
+}
+
+/**
+ * The index (as in the step id) of the step a box on the page belongs to: the smallest step box that
+ * contains the box's centre, else the step box nearest to it. Null when the page has no steps.
+ */
+export function stepIndexAt(analysis: PageAnalysis, box: Bbox): number | null {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  let best: { index: number; outside: number; area: number } | null = null;
+  [...analysis.steps].sort(readingOrder).forEach(({ bbox: b }, index) => {
+    const dx = Math.max(b.x - cx, 0, cx - (b.x + b.w));
+    const dy = Math.max(b.y - cy, 0, cy - (b.y + b.h));
+    const candidate = { index, outside: Math.hypot(dx, dy), area: b.w * b.h };
+    if (!best || candidate.outside < best.outside || (candidate.outside === best.outside && candidate.area < best.area)) {
+      best = candidate;
+    }
+  });
+  return (best as { index: number } | null)?.index ?? null;
 }

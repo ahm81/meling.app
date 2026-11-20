@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  brickBag,
+  brickCatalog,
   packingList,
   storagePaths,
   wholePageSteps,
@@ -9,6 +11,7 @@ import {
   type PlanOp,
   type Step,
 } from "@meling/shared";
+import { BrickBagList } from "./Bricks";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
@@ -92,6 +95,11 @@ export function DayDetail({
   const urls = useDownloadUrls([...imagePaths, ...cutoutPaths]);
 
   const parts = useMemo(() => packingList(steps, plan.days[day - 1]?.stepIds ?? []), [steps, plan, day]);
+  // With bricks read from the manuals, the packing list shows their pictures and element ids instead.
+  const bag = useMemo(() => {
+    const catalog = brickCatalog([...pages.values()], manuals);
+    return catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? []);
+  }, [pages, manuals, plan, day]);
   const hiddenHere = plan.hidden.filter((h) => dayPages.some((p) => p.manualId === h.manualId && p.page === h.page));
   const hiddenElsewhere = plan.hidden.filter((h) => !hiddenHere.includes(h));
 
@@ -295,7 +303,9 @@ export function DayDetail({
       <div className="cards">
         <div className="card">
           <h3>Pakkeliste dag {day}</h3>
-          {parts.length === 0 ? (
+          {bag ? (
+            <BrickBagList calId={calId} bag={bag} />
+          ) : parts.length === 0 ? (
             <p className="muted">Ingen brikker funnet for denne dagen.</p>
           ) : (
             <ul className="part-list">

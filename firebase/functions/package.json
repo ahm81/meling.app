@@ -14,7 +14,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:emulator": "vitest run -c vitest.emulator.config.ts",
-    "try-analysis": "tsup scripts/try-analysis.ts --no-config --format esm --target node22 --out-dir .try-analysis --silent && node .try-analysis/try-analysis.js"
+    "try-analysis": "tsup scripts/try-analysis.ts --no-config --format esm --target node22 --out-dir .try-analysis --silent && node .try-analysis/try-analysis.js",
+    "try-bricks": "tsup scripts/try-bricks.ts --no-config --format esm --target node22 --out-dir .try-analysis --silent && node .try-analysis/try-bricks.js"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
