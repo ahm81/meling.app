@@ -249,3 +249,42 @@ export const bagCount = (bag: BrickBag) =>
 
 export const bricksText = (n: number) =>
   `${n} ${n === 1 ? "brikke" : "brikker"}`;
+
+/**
+ * The bricks that are in no bag, as pictures to press: pressing one puts one of it in the bag at hand.
+ * Shown next to the day's pages, so an adult can find the brick by its looks without the manual.
+ */
+export function UnplacedBricks({
+  calId,
+  bricks,
+  busy,
+  onPlace,
+}: {
+  calId: string;
+  bricks: { elementId: string; left: number }[];
+  busy?: boolean;
+  onPlace: (elementId: string) => void;
+}) {
+  const urls = useDownloadUrls(bricks.map((b) => storagePaths.brickImage(calId, b.elementId)));
+  return (
+    <div className="brick-choices">
+      {bricks.map((b) => (
+        <button
+          key={b.elementId}
+          className="brick-choice"
+          disabled={busy}
+          title={`Legg én ${b.elementId} i denne posen`}
+          onClick={() => onPlace(b.elementId)}
+        >
+          <span className="brick-image">
+            {urls[storagePaths.brickImage(calId, b.elementId)] && (
+              <img src={urls[storagePaths.brickImage(calId, b.elementId)]!} alt="" loading="lazy" />
+            )}
+          </span>
+          <span className="brick-id">{b.elementId}</span>
+          <span className="muted">{b.left} igjen</span>
+        </button>
+      ))}
+    </div>
+  );
+}
