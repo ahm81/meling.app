@@ -139,8 +139,8 @@ const RedraftInput = z.object({ calendarId: Id, baseVersion: z.int().min(1).null
 
 /**
  * Runs the AI draft again with the current wishes and writes it as a new version. Regions the adults hid
- * in the base version are kept, and so are its whole pages (they fall back to cutouts if the new draft splits
- * the page); the AI's own hidden regions are replaced by the new draft's.
+ * in the base version are kept, and so are the bricks they placed or corrected by hand and its whole pages (they fall back
+ * to cutouts if the new draft splits the page); the AI's own hidden regions are replaced by the new draft's.
  * Allowed when the draft is done or failed, or has been "running" for more than 15 minutes.
  */
 export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequest): Promise<{ version: number }> {
@@ -176,7 +176,7 @@ export async function redraftHandler({ db, ai }: CallableDeps, request: CallRequ
       baseVersion,
       author: { kind: "ai", requestedBy: uid },
       summary: "Nytt utkast fra AI",
-      plan: { days: draft.days, hidden: [...draft.hidden, ...kept], wholePages: base?.wholePages ?? [] },
+      plan: { days: draft.days, hidden: [...draft.hidden, ...kept], wholePages: base?.wholePages ?? [], extraBricks: base?.extraBricks ?? [], brickFixes: base?.brickFixes ?? [] },
     });
     await calRef.update({ draft: "done", draftError: null, draftUpdatedAt: FieldValue.serverTimestamp() });
     return { version };

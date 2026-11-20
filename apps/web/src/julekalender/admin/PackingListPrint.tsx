@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
-import { brickBag, brickCatalog, brickReconcile, packingList, storagePaths } from "@meling/shared";
-import { readBricks } from "./api";
+import {
+  DOOR_COUNT,
+  brickBags,
+  brickCatalog,
+  brickReconcile,
+  packingList,
+  storagePaths,
+  type PlacedCallout,
+  type PlanOp,
+} from "@meling/shared";
+import { editPlan, readBricks } from "./api";
 import { BrickBagList, BrickLine, bagCount, bricksText } from "./Bricks";
 import { PartLine } from "./DayDetail";
 import { buildSteps, callableError } from "./plan-view";
@@ -26,13 +35,10 @@ export function PackingListPrint() {
   const steps = useMemo(() => buildSteps(pageDocs, manuals), [pageDocs, manuals]);
   const plan =
     calendar && currentVersion && currentVersion.number === calendar.currentVersion ? currentVersion.plan : null;
-  const catalog = useMemo(() => brickCatalog(pageDocs, manuals), [pageDocs, manuals]);
+  const catalog = useMemo(() => brickCatalog(pageDocs, manuals, plan?.brickFixes), [pageDocs, manuals, plan]);
   const textBags = useMemo(() => (plan ? plan.days.map((d) => packingList(steps, d.stepIds)) : []), [plan, steps]);
-  const bags = useMemo(() => (plan && catalog ? plan.days.map((d) => brickBag(catalog, d.stepIds)) : []), [plan, catalog]);
-  const differences = useMemo(
-    () => (plan && catalog ? brickReconcile(catalog, plan.days.flatMap((d) => d.stepIds)) : []),
-    [plan, catalog],
-  );
+  const bags = useMemo(() => (plan && catalog ? brickBags(catalog, plan) : []), [plan, catalog]);
+  const differences = useMemo(() => (plan && catalog ? brickReconcile(catalog, plan) : []), [plan, catalog]);
   const missing = differences.filter((d) => d.distributed < d.expected);
   const surplus = differences.filter((d) => d.distributed > d.expected);
   // Per brick: which bags it goes in.
@@ -55,6 +61,39 @@ export function PackingListPrint() {
   );
   const urls = useDownloadUrls(view === "bricks" || differences.length > 0 ? imagePaths : []);
   const urlOf = (elementId: string) => urls[storagePaths.brickImage(calId, elementId)];
+
+  const [placing, setPlacing] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+  // How many of each missing brick to place; defaults to all that are missing.
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
+
+  /** Saves one edit of the bricks as a new version. */
+  async function edit(op: PlanOp, summary: string) {
+    if (!calendar || calendar.currentVersion === null || placing) return;
+    setPlacing(true);
+    setPlaceError(null);
+    try {
+      await editPlan({ calendarId: calId, baseVersion: calendar.currentVersion, ops: [op], summary });
+    } catch (e) {
+      console.error("editPlan", e);
+      setPlaceError(callableError(e).message);
+    } finally {
+      setPlacing(false);
+    }
+  }
+  /** Sets how many of a brick are placed by hand in a day's bag (0 takes them out). */
+  const place = (elementId: string, day: number, qty: number, summary: string) =>
+    edit({ type: "placeBrick", elementId, day, qty }, summary);
+  const fix = {
+    choices: { missing: missing.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
+    onFix: ({ manualId, page, index }: PlacedCallout, elementId: string | null) =>
+      void edit(
+        { type: "fixBrick", manualId, page, index, elementId },
+        elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+      ),
+  };
+  const placedIn = (elementId: string, day: number) =>
+    plan?.extraBricks.find((b) => b.elementId === elementId && b.day === day)?.qty ?? 0;
 
   async function read() {
     setReading(true);
@@ -124,6 +163,11 @@ export function PackingListPrint() {
           <p className="print-only">
             Julekalender {calendar.year} – {calendar.childName} (versjon {calendar.currentVersion})
           </p>
+          {placeError && (
+            <p role="alert" className="no-print">
+              {placeError}
+            </p>
+          )}
           {catalog && (
             <p className="muted">
               Delelisten har {total} brikker. {inBags} ligger i en pose
@@ -156,7 +200,14 @@ export function PackingListPrint() {
                   <h3>
                     Pose {i + 1} <span className="muted small">{bricksText(bagCount(bag))}</span>
                   </h3>
-                  <BrickBagList calId={calId} bag={bag} tick />
+                  <BrickBagList
+                    calId={calId}
+                    bag={bag}
+                    tick
+                    busy={placing}
+                    fix={fix}
+                    onRemove={(elementId, qty) => place(elementId, i + 1, 0, `Tok ${qty}× ${elementId} ut av pose ${i + 1}`)}
+                  />
                 </section>
               ))}
             </div>
@@ -176,15 +227,51 @@ export function PackingListPrint() {
             <section className="bag">
               <h3>Ikke i noen pose</h3>
               <p className="muted small">
-                Brikker delelisten har flere av enn byggetrinnene viser, for eksempel figurdeler. Legg dem i posen
-                der de bygges.
+                Brikker delelisten har flere av enn byggetrinnene viser, for eksempel figurdeler. Velg posen de skal
+                i, der de bygges.
               </p>
               <ul className="part-list brick-columns">
-                {missing.map((d) => (
-                  <BrickLine key={d.elementId} url={urlOf(d.elementId)} elementId={d.elementId} tick>
-                    <strong>{d.expected - d.distributed}×</strong>
-                  </BrickLine>
-                ))}
+                {missing.map((d) => {
+                  const left = d.expected - d.distributed;
+                  const amount = Math.min(amounts[d.elementId] ?? left, left);
+                  return (
+                    <BrickLine key={d.elementId} url={urlOf(d.elementId)} elementId={d.elementId} tick>
+                      <span className="place no-print">
+                        {left > 1 && (
+                          <select
+                            aria-label={`Antall av ${d.elementId}`}
+                            value={amount}
+                            disabled={placing}
+                            onChange={(e) => setAmounts((a) => ({ ...a, [d.elementId]: Number(e.target.value) }))}
+                          >
+                            {Array.from({ length: left }, (_, n) => (
+                              <option key={n + 1} value={n + 1}>
+                                {n + 1}×
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <select
+                          aria-label={`Legg ${d.elementId} i pose`}
+                          value=""
+                          disabled={placing}
+                          onChange={(e) => {
+                            const day = Number(e.target.value);
+                            if (day) void place(d.elementId, day, placedIn(d.elementId, day) + amount, `La ${amount}× ${d.elementId} i pose ${day}`);
+                          }}
+                        >
+                          <option value="">Legg i pose …</option>
+                          {Array.from({ length: DOOR_COUNT }, (_, n) => (
+                            <option key={n + 1} value={n + 1}>
+                              Pose {n + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                      <strong>{left}×</strong>
+                    </BrickLine>
+                  );
+                })}
               </ul>
             </section>
           )}
@@ -193,7 +280,7 @@ export function PackingListPrint() {
               <h3>Flere enn delelisten har</h3>
               <p className="muted small">
                 Byggetrinnene ser ut til å bruke flere av disse enn settet har. Trolig er en brikke koblet til feil
-                nummer; se etter linjer merket med ?.
+                nummer (se etter linjer merket med ?), eller lagt i en pose for hånd en gang for mye.
               </p>
               <ul className="part-list brick-columns">
                 {surplus.map((d) => (

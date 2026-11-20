@@ -57,11 +57,34 @@ export type Hidden = z.infer<typeof Hidden>;
 export const WholePage = z.object({ manualId: z.string(), page: z.int().min(1) });
 export type WholePage = z.infer<typeof WholePage>;
 
+// Bricks an adult put in a day's bag by hand: bricks the parts list has but no step's parts box shows
+// (minifigure parts, for example). At most one entry per element id and day.
+export const ExtraBrick = z.object({
+  elementId: z.string().regex(/^\d{4,10}$/),
+  day: z.int().min(1).max(DOOR_COUNT),
+  qty: z.int().min(1).max(99),
+});
+export type ExtraBrick = z.infer<typeof ExtraBrick>;
+
+// An adult's answer to which brick a parts box entry really is, where the automatic match was uncertain.
+// `index` is the entry's position in the page's `bricks.callouts`. At most one per entry.
+export const BrickFix = z.object({
+  manualId: z.string(),
+  page: z.int().min(1),
+  index: z.int().min(0),
+  elementId: ExtraBrick.shape.elementId,
+});
+export type BrickFix = z.infer<typeof BrickFix>;
+
 export const Plan = z.object({
   days: z.array(z.object({ stepIds: z.array(z.string()) })).length(DOOR_COUNT),
   hidden: z.array(Hidden),
   // Missing in versions written before whole pages existed.
   wholePages: z.array(WholePage).default([]),
+  // Missing in versions written before bricks could be placed by hand.
+  extraBricks: z.array(ExtraBrick).default([]),
+  // Missing in versions written before matches could be corrected.
+  brickFixes: z.array(BrickFix).default([]),
 });
 export type Plan = z.infer<typeof Plan>;
 
@@ -89,6 +112,21 @@ export const PlanOp = z.discriminatedUnion("type", [
   z.object({ type: z.literal("hide"), hidden: Hidden }),
   z.object({ type: z.literal("show"), hiddenId: z.string() }),
   z.object({ type: z.literal("wholePage"), manualId: z.string(), page: z.int().min(1), whole: z.boolean() }),
+  // Sets how many of a brick an adult has put in a day's bag by hand; qty 0 takes it out again.
+  z.object({
+    type: z.literal("placeBrick"),
+    elementId: ExtraBrick.shape.elementId,
+    day: ExtraBrick.shape.day,
+    qty: z.int().min(0).max(99),
+  }),
+  // Says which brick a parts box entry is; elementId null takes the answer back.
+  z.object({
+    type: z.literal("fixBrick"),
+    manualId: z.string(),
+    page: z.int().min(1),
+    index: z.int().min(0),
+    elementId: ExtraBrick.shape.elementId.nullable(),
+  }),
 ]);
 export type PlanOp = z.infer<typeof PlanOp>;
 

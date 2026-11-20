@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   brickBag,
   brickCatalog,
+  brickReconcile,
   packingList,
   storagePaths,
   wholePageSteps,
@@ -96,10 +97,16 @@ export function DayDetail({
 
   const parts = useMemo(() => packingList(steps, plan.days[day - 1]?.stepIds ?? []), [steps, plan, day]);
   // With bricks read from the manuals, the packing list shows their pictures and element ids instead.
-  const bag = useMemo(() => {
-    const catalog = brickCatalog([...pages.values()], manuals);
-    return catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? []);
-  }, [pages, manuals, plan, day]);
+  const catalog = useMemo(() => brickCatalog([...pages.values()], manuals, plan.brickFixes), [pages, manuals, plan]);
+  const extras = useMemo(() => plan.extraBricks.filter((b) => b.day === day), [plan, day]);
+  const bag = useMemo(() => catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? [], extras), [catalog, plan, day, extras]);
+  // Bricks the parts list has more of than the bags: an adult can put them in this day's bag.
+  const unplaced = useMemo(
+    () => (catalog ? brickReconcile(catalog, plan).filter((d) => d.distributed < d.expected) : []),
+    [catalog, plan],
+  );
+  const placeBrick = (elementId: string, qty: number, summary: string) =>
+    void onEdit([{ type: "placeBrick", elementId, day, qty }], summary);
   const hiddenHere = plan.hidden.filter((h) => dayPages.some((p) => p.manualId === h.manualId && p.page === h.page));
   const hiddenElsewhere = plan.hidden.filter((h) => !hiddenHere.includes(h));
 
@@ -304,7 +311,43 @@ export function DayDetail({
         <div className="card">
           <h3>Pakkeliste dag {day}</h3>
           {bag ? (
-            <BrickBagList calId={calId} bag={bag} />
+            <>
+              <BrickBagList
+                calId={calId}
+                bag={bag}
+                busy={busy}
+                fix={{
+                  choices: { missing: unplaced.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
+                  onFix: ({ manualId, page, index }, elementId) =>
+                    void onEdit(
+                      [{ type: "fixBrick", manualId, page, index, elementId }],
+                      elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+                    ),
+                }}
+                onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}
+              />
+              {unplaced.length > 0 && (
+                <label className="place-here">
+                  <span className="muted small">Brikker som ikke ligger i noen pose</span>
+                  <select
+                    value=""
+                    disabled={busy}
+                    onChange={(e) => {
+                      const elementId = e.target.value;
+                      const placed = extras.find((b) => b.elementId === elementId)?.qty ?? 0;
+                      if (elementId) placeBrick(elementId, placed + 1, `La 1× ${elementId} i pose ${day}`);
+                    }}
+                  >
+                    <option value="">Legg en brikke i denne posen …</option>
+                    {unplaced.map((d) => (
+                      <option key={d.elementId} value={d.elementId}>
+                        {d.elementId} ({d.expected - d.distributed} igjen)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </>
           ) : parts.length === 0 ? (
             <p className="muted">Ingen brikker funnet for denne dagen.</p>
           ) : (
