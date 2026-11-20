@@ -95,13 +95,15 @@ const samePage = (a: Step, b: Step) => a.manualId === b.manualId && a.page === b
  * One row per day: step range, brick count and warnings. «midt på side» when the day's first step
  * shares a page with the previous day's last step; «få brikker» when the day has under half the
  * average bricks per day. Unknown step ids (pages still loading) are skipped.
+ * `bagCounts` are the bricks in each day's bag when they have been read from the manuals (bricks placed by
+ * hand included); without them the count is the AI's reading of the steps.
  */
-export function dayRows(plan: Plan, index: StepIndex): DayRow[] {
+export function dayRows(plan: Plan, index: StepIndex, bagCounts?: number[]): DayRow[] {
   const days = plan.days.map((d) => d.stepIds.flatMap((id) => index.byId.get(id) ?? []));
-  const total = days.reduce((n, steps) => n + steps.reduce((m, s) => m + s.brickCount, 0), 0);
-  const average = total / DOOR_COUNT;
+  const counts = days.map((steps, i) => bagCounts?.[i] ?? steps.reduce((n, s) => n + s.brickCount, 0));
+  const average = counts.reduce((n, c) => n + c, 0) / DOOR_COUNT;
   return days.map((steps, i) => {
-    const bricks = steps.reduce((n, s) => n + s.brickCount, 0);
+    const bricks = counts[i]!;
     const first = steps[0];
     const last = steps[steps.length - 1];
     const warnings: DayWarning[] = [];
