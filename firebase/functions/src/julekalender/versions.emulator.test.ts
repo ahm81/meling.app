@@ -32,9 +32,12 @@ afterAll(() => deleteApp(app));
 
 const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [], extraBricks: [], brickFixes: [] });
 
-async function seedCalendar(overrides: Partial<CalendarDoc> = {}): Promise<string> {
+// A calendar as stored: fields with defaults in the schema (theme, doorImages) may be missing.
+type StoredCalendar = Omit<CalendarDoc, "theme" | "doorImages"> & Partial<Pick<CalendarDoc, "theme" | "doorImages">>;
+
+async function seedCalendar(overrides: Partial<StoredCalendar> = {}): Promise<string> {
   const calId = `2026-${randomUUID()}`;
-  const doc: CalendarDoc = {
+  const doc: StoredCalendar = {
     year: 2026,
     childUid: "child",
     childName: "Ida",
