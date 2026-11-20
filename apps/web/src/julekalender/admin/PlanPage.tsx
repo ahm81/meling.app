@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { DOOR_COUNT, brickBags, brickCatalog, brickReconcile, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
-import { UnplacedBricks, bricksText } from "./Bricks";
 import { DayDetail } from "./DayDetail";
 import {
   REDRAFT_CONFIRM,
@@ -71,12 +70,9 @@ export function PlanPage() {
   // With bricks read from the manuals, the check is exact (per element id) and shown on the packing list.
   const brickDifferences = useMemo(() => (plan && catalog ? brickReconcile(catalog, plan) : null), [plan, catalog]);
 
-  // Bricks the parts list has more of than the bags: shown above the days, to be put in the selected day's bag.
-  const unplaced = useMemo(
-    () =>
-      (brickDifferences ?? [])
-        .filter((d) => d.distributed < d.expected)
-        .map((d) => ({ elementId: d.elementId, left: d.expected - d.distributed })),
+  // Bricks the parts list has more of than the bags: their number is shown above the days.
+  const unplacedCount = useMemo(
+    () => (brickDifferences ?? []).reduce((n, d) => n + Math.max(0, d.expected - d.distributed), 0),
     [brickDifferences],
   );
 
@@ -196,26 +192,18 @@ export function PlanPage() {
       ) : (
         <div className="plan-layout">
           <nav className="day-list card" aria-label="Dager">
-            {unplaced.length > 0 && (
-              <div className="unplaced">
-                <strong>Ikke fordelt: {bricksText(unplaced.reduce((n, b) => n + b.left, 0))}</strong>
-                <span className="muted small">Trykk på en brikke for å legge den i posen for dag {day}.</span>
-                <UnplacedBricks
-                  calId={calId}
-                  bricks={unplaced}
-                  busy={busy || redrafting || draftRunning || manualsChanged}
-                  onPlace={(elementId) => {
-                    const placed = plan.extraBricks.find((b) => b.elementId === elementId && b.day === day)?.qty ?? 0;
-                    void edit([{ type: "placeBrick", elementId, day, qty: placed + 1 }], `La 1× ${elementId} i pose ${day}`);
-                  }}
-                />
-              </div>
-            )}
             <div className="day-row day-head" aria-hidden="true">
               <span>Dag</span>
               <span>Trinn</span>
               <span className="num">Brikker</span>
             </div>
+            {unplacedCount > 0 && (
+              <div className="day-row unplaced-row" title="Brikker delelisten har, men som ikke ligger i noen pose">
+                <span />
+                <span>Ikke fordelt</span>
+                <span className="num">{unplacedCount}</span>
+              </div>
+            )}
             {rows.map((r) => (
               <button
                 key={r.day}

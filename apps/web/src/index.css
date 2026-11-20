@@ -504,24 +504,9 @@ dialog.confirm .toolbar {
   }
 }
 
-.unplaced {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.unplaced .brick-choices {
-  grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
-}
-
-.unplaced .brick-choice {
-  padding: 4px;
-  font-size: 0.6875rem;
-}
-
-.unplaced .brick-choice .brick-image {
-  height: 40px;
+.unplaced-row {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .plan-detail {
