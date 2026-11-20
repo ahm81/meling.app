@@ -7,7 +7,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { paths } from "@meling/shared";
+import { paths, storagePaths } from "@meling/shared";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 let env: RulesTestEnvironment;
@@ -198,6 +198,35 @@ describe("julekalender", () => {
     await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "pages", text: "" } }));
     await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { wishes: { balance: "steps", text: "", x: 1 } }));
     await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { "wishes.balance": "pages" }));
+  });
+
+  it("adults may choose a theme and put pictures on doors", async () => {
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertSucceeds(updateDoc(ref, { theme: "vinter" }));
+    await assertSucceeds(
+      updateDoc(ref, {
+        doorImages: { "1": storagePaths.doorImage("2026-ida", 1, "abc1"), "24": storagePaths.doorImage("2026-ida", 24, "x") },
+      }),
+    );
+    await assertSucceeds(updateDoc(ref, { "doorImages.5": storagePaths.doorImage("2026-ida", 5, "y") }));
+    await assertSucceeds(updateDoc(ref, { doorImages: {} }));
+  });
+
+  it("denies unknown themes and bad door pictures", async () => {
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertFails(updateDoc(ref, { theme: "sommer" }));
+    await assertFails(updateDoc(ref, { doorImages: "x" }));
+    await assertFails(updateDoc(ref, { doorImages: { "25": storagePaths.doorImage("2026-ida", 25, "a") } }));
+    await assertFails(updateDoc(ref, { doorImages: { "1": 5 } }));
+    // The picture of another door, or of another calendar.
+    await assertFails(updateDoc(ref, { doorImages: { "1": storagePaths.doorImage("2026-ida", 2, "a") } }));
+    await assertFails(updateDoc(ref, { doorImages: { "1": storagePaths.doorImage("2026-julian", 1, "a") } }));
+    await assertFails(updateDoc(ref, { doorImages: { "1": "julekalender/2026-ida/manuals/m1.pdf" } }));
+  });
+
+  it("children cannot change the theme", async () => {
+    const db = env.authenticatedContext("ida").firestore();
+    await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { theme: "natt" }));
   });
 
   it("adults may only change wishes and childName", async () => {

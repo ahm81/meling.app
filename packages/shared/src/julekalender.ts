@@ -153,6 +153,15 @@ export const Wishes = z.object({
 });
 export type Wishes = z.infer<typeof Wishes>;
 
+// The look of the child's calendar. The colours live in the web app's CSS (`.child-frame[data-theme]`).
+export const THEMES = ["jul", "vinter", "skog", "natt"] as const;
+export const Theme = z.enum(THEMES);
+export type Theme = z.infer<typeof Theme>;
+
+// Door number ("1".."24") → Storage path of the picture on that door (see `storagePaths.doorImage`).
+export const DoorImages = z.record(z.string().regex(/^([1-9]|1\d|2[0-4])$/), z.string());
+export type DoorImages = z.infer<typeof DoorImages>;
+
 export const CalendarDoc = z.object({
   year: z.int().min(2024),
   childUid: z.string(),
@@ -165,6 +174,9 @@ export const CalendarDoc = z.object({
   // Set by functions whenever `draft` changes; a "running" draft older than 15 minutes can be redone.
   // A Date here; readers convert the Firestore Timestamp before parsing.
   draftUpdatedAt: z.date().optional(),
+  // Chosen by adults. Missing in calendars made before these existed.
+  theme: Theme.default("jul"),
+  doorImages: DoorImages.default({}),
 });
 export type CalendarDoc = z.infer<typeof CalendarDoc>;
 

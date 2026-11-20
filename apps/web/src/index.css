@@ -1100,8 +1100,38 @@ details summary {
   gap: 1rem;
   padding: 1.25rem 1rem 1.5rem;
   border-radius: 24px;
-  background: #14382b;
-  color: #fdf6e3;
+  /* The theme «jul»; the other themes only change these. */
+  --c-bg: #14382b;
+  --c-door: #a3262a;
+  --c-done: #1f5c45;
+  --c-accent: #e2b857;
+  --c-text: #fdf6e3;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+.child-frame[data-theme="vinter"] {
+  --c-bg: #16324f;
+  --c-door: #2f6f9f;
+  --c-done: #1d4566;
+  --c-accent: #cfe3f1;
+  --c-text: #f4f9fc;
+}
+
+.child-frame[data-theme="skog"] {
+  --c-bg: #24361f;
+  --c-door: #4e7a3a;
+  --c-done: #33502a;
+  --c-accent: #e0ad4a;
+  --c-text: #f6f1dd;
+}
+
+.child-frame[data-theme="natt"] {
+  --c-bg: #15132b;
+  --c-door: #3a2f6b;
+  --c-done: #262048;
+  --c-accent: #f0c75e;
+  --c-text: #f5f1ff;
 }
 
 .child-title {
@@ -1124,14 +1154,14 @@ details summary {
   padding: 0;
   display: grid;
   place-items: center;
-  border: 2px solid #e2b857;
+  border: 2px solid var(--c-accent);
   border-radius: 12px;
-  background: #a3262a;
-  color: #fdf6e3;
+  background: var(--c-door);
+  color: var(--c-text);
 }
 
 .door.done {
-  background: #1f5c45;
+  background: var(--c-done);
   border-style: dashed;
 }
 
@@ -1155,9 +1185,9 @@ details summary {
   aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border: 2px solid #e2b857;
+  border: 2px solid var(--c-accent);
   border-radius: 16px;
-  background: #a3262a;
+  background: var(--c-door);
 }
 
 .door-head .door-number {
@@ -1182,8 +1212,8 @@ details summary {
   padding: 0 1.75rem;
   border: 0;
   border-radius: 26px;
-  background: #e2b857;
-  color: #14382b;
+  background: var(--c-accent);
+  color: var(--c-bg);
   font-size: 1.05rem;
   font-weight: 700;
 }
@@ -1193,7 +1223,162 @@ details summary {
 }
 
 .door-retry {
-  background: #fdf6e3;
-  color: #14382b;
+  background: var(--c-text);
+  color: var(--c-bg);
   border: 0;
+}
+
+/* A door with a picture: the picture fills it and the number sits in a round badge. */
+.door.has-image {
+  background-color: var(--c-door);
+  background-size: cover;
+  background-position: center;
+  place-items: start;
+}
+
+.door.has-image .door-number {
+  margin: 4px;
+  min-width: 1.6rem;
+  padding: 0 0.3rem;
+  border-radius: 0.8rem;
+  background: var(--c-bg);
+  font-size: 1rem;
+  line-height: 1.6rem;
+  text-align: center;
+}
+
+.door.has-image.done {
+  opacity: 0.6;
+}
+
+.door.has-image .door-done {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 0;
+  background: var(--c-bg);
+  text-align: center;
+}
+
+.door-head.has-image {
+  width: 9rem;
+}
+
+.door-head.has-image .door-number {
+  font-size: 1.25rem;
+}
+
+/* «Utseende» */
+.appearance {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.appearance .card {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.appearance .card > * {
+  margin: 0;
+}
+
+.theme-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.75rem;
+  justify-self: stretch;
+}
+
+.theme-choice {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.theme-choice.chosen {
+  border-color: var(--green);
+  font-weight: 600;
+}
+
+.theme-choice input {
+  position: absolute;
+  opacity: 0;
+}
+
+.theme-choice:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.theme-swatch {
+  width: auto;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border-radius: 10px;
+}
+
+.theme-swatch .door {
+  border-radius: 6px;
+}
+
+.theme-swatch .door-number {
+  font-size: 1rem;
+}
+
+.door-edit {
+  display: grid;
+  gap: 0.25rem;
+  align-content: start;
+}
+
+label.door {
+  cursor: pointer;
+  overflow: hidden;
+}
+
+label.door:has(input:focus-visible) {
+  outline: 2px solid var(--c-text);
+  outline-offset: 2px;
+}
+
+.door.working {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.door-remove {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-text);
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.appearance .card > .child-frame {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }

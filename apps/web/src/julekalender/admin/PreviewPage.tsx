@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { DOOR_COUNT, wholePageSteps } from "@meling/shared";
+import { ChildFrame, DAYS, doorFace } from "./Doors";
 import { buildSteps, childImages, indexSteps, manualsChangedSincePlan } from "./plan-view";
 import { useCalendar } from "./useCalendar";
 import { useCutouts, useDownloadUrls } from "./useCutouts";
@@ -44,6 +45,13 @@ export function PreviewPage() {
   }, [plan, door, index, steps]);
   const urls = useDownloadUrls(images.flatMap((img) => cutouts.cutouts[img.stepIds[0]!] ?? []));
 
+  const doorUrls = useDownloadUrls(Object.values(calendar?.doorImages ?? {}));
+  const face = (d: number, extra = "") => {
+    const path = calendar?.doorImages[d];
+    const f = doorFace(path ? doorUrls[path] : null);
+    return { ...f, className: `${f.className}${extra}` };
+  };
+
   if (!calendar) return error ? <p role="alert">{error}</p> : null;
 
   const notice = (
@@ -77,13 +85,13 @@ export function PreviewPage() {
       {manualsChanged && (
         <p role="alert">Manualene er endret siden fordelingen ble laget. Lag et nytt utkast for å se bildene.</p>
       )}
-      <div className="child-frame">
+      <ChildFrame theme={calendar.theme}>
         {door === null ? (
           <>
             <h2 className="child-title">God jul, {calendar.childName}!</h2>
             <div className="doors">
-              {Array.from({ length: DOOR_COUNT }, (_, i) => i + 1).map((d) => (
-                <button key={d} className={`door${done.has(d) ? " done" : ""}`} onClick={() => open(d)}>
+              {DAYS.map((d) => (
+                <button key={d} {...face(d, done.has(d) ? " done" : "")} onClick={() => open(d)}>
                   <span className="door-number">{d}</span>
                   {done.has(d) && <span className="door-done">Ferdig</span>}
                 </button>
@@ -92,7 +100,7 @@ export function PreviewPage() {
           </>
         ) : (
           <>
-            <div className="door-head">
+            <div {...face(door, " door-head")}>
               <span className="door-number">{door}</span>
             </div>
             {cutouts.error ? (
@@ -130,7 +138,7 @@ export function PreviewPage() {
             </button>
           </>
         )}
-      </div>
+      </ChildFrame>
       {door !== null && (
         <div className="toolbar preview-nav">
           <button className="btn" disabled={door === 1} onClick={() => open(door - 1)}>

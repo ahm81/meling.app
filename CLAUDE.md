@@ -26,6 +26,8 @@ Privat app kun for Meling-familien (Amund, Ingjerd, Julian og Ida), med tjeneste
 - Pakkelistens bilder og brikkenumre leses rett fra PDF-en uten AI (`bricks.ts`): hver brikke er et eget bilde med
   antall som tekst under, og brikkeboksene kobles til delelisten på bildelikhet. Sjekk mot ekte manualer med
   `pnpm --filter @meling/functions try-bricks <hefte1.pdf> [hefte2.pdf]` (PDF-ene committes aldri).
+- Kalenderens utseende (`theme`, `doorImages`) settes av voksne rett fra web (fanen «Utseende»), uten functions.
+  Nye temaer legges til i `THEMES` (shared), `validTheme` i `firestore.rules` og `.child-frame[data-theme]` i CSS.
 - `mupdf` (PDF-rendering) er AGPL-3.0. Det er en bevisst avhengighet i functions.
 - Ikke sjekk inn `Meling.xcodeproj`; endre `project.yml` og kjør `xcodegen generate`.
 

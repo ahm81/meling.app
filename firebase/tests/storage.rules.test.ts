@@ -7,7 +7,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { doc, setDoc } from "firebase/firestore";
-import { getBytes, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 import { paths, storagePaths } from "@meling/shared";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
@@ -86,6 +86,34 @@ describe("storage julekalender", () => {
   it("children cannot read page images", async () => {
     const st = env.authenticatedContext("ida").storage();
     await assertFails(getBytes(ref(st, storagePaths.pageImage("2026-ida", "m1", 1))));
+  });
+
+  it("adults upload, read and delete door pictures", async () => {
+    const st = env.authenticatedContext("amund").storage();
+    const door = ref(st, storagePaths.doorImage("2026-ida", 3, "abc"));
+    await assertSucceeds(uploadBytes(door, bytes(), { contentType: "image/jpeg" }));
+    await assertSucceeds(getBytes(door));
+    await assertSucceeds(deleteObject(door));
+  });
+
+  it("rejects door pictures that are not small JPEGs", async () => {
+    const st = env.authenticatedContext("amund").storage();
+    const door = ref(st, storagePaths.doorImage("2026-ida", 3, "abc"));
+    await assertFails(uploadBytes(door, bytes(), { contentType: "image/png" }));
+    await assertFails(uploadBytes(door, new Uint8Array(2 * 1024 * 1024), { contentType: "image/jpeg" }));
+  });
+
+  it("children cannot upload or read door pictures", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await uploadBytes(ref(ctx.storage(), storagePaths.doorImage("2026-ida", 3, "abc")), bytes(), {
+        contentType: "image/jpeg",
+      });
+    });
+    const st = env.authenticatedContext("ida").storage();
+    await assertFails(getBytes(ref(st, storagePaths.doorImage("2026-ida", 3, "abc"))));
+    await assertFails(
+      uploadBytes(ref(st, storagePaths.doorImage("2026-ida", 4, "abc")), bytes(), { contentType: "image/jpeg" }),
+    );
   });
 
   it("adults cannot write page images or cutouts", async () => {

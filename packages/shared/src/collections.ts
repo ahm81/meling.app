@@ -30,6 +30,10 @@ export const storagePaths = {
   // position in the page's `bricks.callouts`.
   calloutImage: (calId: string, manualId: string, page: number, index: number) =>
     `${Collections.julekalender}/${calId}/bricks/callouts/${manualId}/${page}_${index}.webp`,
+  // The picture an adult has put on a door. `id` is new for every upload, so a replaced picture gets a new path
+  // (and URL) instead of being served from a cache.
+  doorImage: (calId: string, day: number, id: string) =>
+    `${Collections.julekalender}/${calId}/doors/${day}_${id}.jpg`,
   // Folder prefixes (with trailing slash) for deleting a manual's derived files.
   pagesDir: (calId: string, manualId: string) =>
     `${Collections.julekalender}/${calId}/pages/${manualId}/`,

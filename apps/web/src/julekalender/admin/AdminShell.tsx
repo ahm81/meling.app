@@ -18,6 +18,7 @@ const tabs = [
   ["manualer", "Manualer"],
   ["fordeling", "Fordeling"],
   ["pakkeliste", "Pakkeliste"],
+  ["utseende", "Utseende"],
   ["forhandsvisning", "Forhåndsvisning"],
   ["historikk", "Historikk"],
 ] as const;
