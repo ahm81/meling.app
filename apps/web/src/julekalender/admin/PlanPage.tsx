@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { DOOR_COUNT, brickCatalog, brickReconcile, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
+import { DOOR_COUNT, brickBags, brickCatalog, brickReconcile, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
 import { DayDetail } from "./DayDetail";
 import {
@@ -41,7 +41,16 @@ export function PlanPage() {
   const pageDocs = useMemo(() => pages.map((p) => p.page), [pages]);
   const steps = useMemo(() => buildSteps(pageDocs, manuals), [pageDocs, manuals]);
   const index = useMemo(() => indexSteps(steps), [steps]);
-  const rows = useMemo(() => (plan ? dayRows(plan, index) : []), [plan, index]);
+  // With bricks read from the manuals, a day's count is what is in its bag, bricks placed by hand included.
+  const catalog = useMemo(() => (plan ? brickCatalog(pageDocs, manuals, plan.brickFixes) : null), [plan, pageDocs, manuals]);
+  const bagCounts = useMemo(
+    () =>
+      plan && catalog
+        ? brickBags(catalog, plan).map((b) => b.lines.reduce((n, l) => n + l.qty, 0) + b.unsure.reduce((n, c) => n + c.qty, 0))
+        : undefined,
+    [plan, catalog],
+  );
+  const rows = useMemo(() => (plan ? dayRows(plan, index, bagCounts) : []), [plan, index, bagCounts]);
   const pageMap = useMemo(() => new Map<string, PageDoc>(pages.map((p) => [`${p.page.manualId}_${p.page.page}`, p.page])), [pages]);
 
   const discrepancies = useMemo(
@@ -59,10 +68,13 @@ export function PlanPage() {
   );
 
   // With bricks read from the manuals, the check is exact (per element id) and shown on the packing list.
-  const brickDifferences = useMemo(() => {
-    const catalog = plan && brickCatalog(pageDocs, manuals, plan.brickFixes);
-    return catalog ? brickReconcile(catalog, plan) : null;
-  }, [plan, pageDocs, manuals]);
+  const brickDifferences = useMemo(() => (plan && catalog ? brickReconcile(catalog, plan) : null), [plan, catalog]);
+
+  // Bricks the parts list has more of than the bags: their number is shown above the days.
+  const unplacedCount = useMemo(
+    () => (brickDifferences ?? []).reduce((n, d) => n + Math.max(0, d.expected - d.distributed), 0),
+    [brickDifferences],
+  );
 
   const parsedDay = Number(search.get("dag"));
   const day = Number.isInteger(parsedDay) && parsedDay >= 1 && parsedDay <= DOOR_COUNT ? parsedDay : 1;
@@ -185,6 +197,13 @@ export function PlanPage() {
               <span>Trinn</span>
               <span className="num">Brikker</span>
             </div>
+            {unplacedCount > 0 && (
+              <div className="day-row unplaced-row" title="Brikker delelisten har, men som ikke ligger i noen pose">
+                <span />
+                <span>Ikke fordelt</span>
+                <span className="num">{unplacedCount}</span>
+              </div>
+            )}
             {rows.map((r) => (
               <button
                 key={r.day}

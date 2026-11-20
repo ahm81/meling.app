@@ -11,7 +11,7 @@ import {
   type PlanOp,
 } from "@meling/shared";
 import { editPlan, readBricks } from "./api";
-import { BrickBagList, BrickLine, bagCount, bricksText } from "./Bricks";
+import { BrickBagList, BrickLine, bagCount, bricksText, fixSummary } from "./Bricks";
 import { PartLine } from "./DayDetail";
 import { buildSteps, callableError } from "./plan-view";
 import { useCalendar } from "./useCalendar";
@@ -68,12 +68,12 @@ export function PackingListPrint() {
   const [amounts, setAmounts] = useState<Record<string, number>>({});
 
   /** Saves one edit of the bricks as a new version. */
-  async function edit(op: PlanOp, summary: string) {
+  async function edit(ops: PlanOp[], summary: string) {
     if (!calendar || calendar.currentVersion === null || placing) return;
     setPlacing(true);
     setPlaceError(null);
     try {
-      await editPlan({ calendarId: calId, baseVersion: calendar.currentVersion, ops: [op], summary });
+      await editPlan({ calendarId: calId, baseVersion: calendar.currentVersion, ops, summary });
     } catch (e) {
       console.error("editPlan", e);
       setPlaceError(callableError(e).message);
@@ -83,13 +83,13 @@ export function PackingListPrint() {
   }
   /** Sets how many of a brick are placed by hand in a day's bag (0 takes them out). */
   const place = (elementId: string, day: number, qty: number, summary: string) =>
-    edit({ type: "placeBrick", elementId, day, qty }, summary);
+    edit([{ type: "placeBrick", elementId, day, qty }], summary);
   const fix = {
     choices: { missing: missing.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
-    onFix: ({ manualId, page, index }: PlacedCallout, elementId: string | null) =>
+    onFix: (callouts: PlacedCallout[], elementId: string | null) =>
       void edit(
-        { type: "fixBrick", manualId, page, index, elementId },
-        elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+        callouts.map(({ manualId, page, index }) => ({ type: "fixBrick", manualId, page, index, elementId })),
+        fixSummary(callouts, elementId),
       ),
   };
   const placedIn = (elementId: string, day: number) =>

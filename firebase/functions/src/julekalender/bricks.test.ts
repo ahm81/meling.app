@@ -117,7 +117,7 @@ describe("readBricks", () => {
       ["300023", 2, true],
     ]);
     expect(read.pages.get("m1_1")!.callouts[0]!.bbox.x).toBeCloseTo(0.1, 2);
-    expect(read.calloutImages).toEqual([]);
+    expect(read.calloutImages.map((c) => [c.manualId, c.page, c.index])).toEqual([["m1", 1, 0], ["m1", 1, 1]]);
 
     expect([...read.images.keys()].sort()).toEqual(["300021", "300023", "300024", "300026", "300028"]);
     const { data, info } = await sharp(read.images.get("300021")!).raw().toBuffer({ resolveWithObject: true });

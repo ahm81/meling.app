@@ -99,6 +99,11 @@ describe("bricks", () => {
     const bag = brickBag(brickCatalog(pages, manuals)!, ["m2:1:0", "m1:1:0", "m1:1:1"]);
     expect(bag.lines).toEqual([{ elementId: "300", qty: 3, extra: 0 }, { elementId: "100", qty: 1, extra: 0 }]);
     expect(bag.unsure.map((c) => [c.elementId, c.qty, c.page, c.index])).toEqual([["300", 1, 1, 1]]);
+    expect(bag.sure.map((c) => [c.elementId, c.manualId, c.page, c.index])).toEqual([
+      ["300", "m1", 1, 0],
+      ["300", "m1", 1, 1],
+      ["100", "m2", 1, 0],
+    ]);
   });
 
   it("lets an adult's answer replace an uncertain match", () => {

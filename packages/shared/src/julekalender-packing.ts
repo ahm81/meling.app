@@ -111,6 +111,8 @@ export interface BrickBag {
   unsure: PlacedCallout[];
   /** Parts box entries an adult has corrected (already counted in `lines`), so the answer can be taken back. */
   fixed: PlacedCallout[];
+  /** Every parts box entry counted in `lines`, so an adult can correct a match that is sure but wrong. */
+  sure: PlacedCallout[];
 }
 
 /** The bricks needed for the given steps, plus the bricks placed by hand in that bag. */
@@ -123,10 +125,13 @@ export function brickBag(catalog: BrickCatalog, stepIds: string[], extras: Extra
   };
   const unsure: PlacedCallout[] = [];
   const fixed: PlacedCallout[] = [];
+  const sure: PlacedCallout[] = [];
   for (const c of catalog.callouts) {
     if (c.stepId === null || !wanted.has(c.stepId)) continue;
-    if (c.sure) add(c.elementId, c.qty, 0);
-    else unsure.push(c);
+    if (c.sure) {
+      add(c.elementId, c.qty, 0);
+      sure.push(c);
+    } else unsure.push(c);
     if (c.fixed) fixed.push(c);
   }
   for (const e of extras) add(e.elementId, e.qty, e.qty);
@@ -136,6 +141,7 @@ export function brickBag(catalog: BrickCatalog, stepIds: string[], extras: Extra
     lines: [...lines.values()].sort((a, b) => (position.get(a.elementId) ?? last) - (position.get(b.elementId) ?? last)),
     unsure,
     fixed,
+    sure,
   };
 }
 

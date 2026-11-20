@@ -697,7 +697,11 @@ describe("callables", () => {
       expect(page2.bricks?.inventory).toHaveLength(5);
       const [files] = await bucket.getFiles({ prefix: storagePaths.bricksDir(calId) });
       expect(files.map((f) => f.name).sort()).toEqual(
-        ["300021", "300023", "300024", "300026", "300028"].map((id) => storagePaths.brickImage(calId, id)),
+        [
+          ...["300021", "300023", "300024", "300026", "300028"].map((id) => storagePaths.brickImage(calId, id)),
+          storagePaths.calloutImage(calId, "m1", 1, 0),
+          storagePaths.calloutImage(calId, "m1", 1, 1),
+        ].sort(),
       );
     });
 

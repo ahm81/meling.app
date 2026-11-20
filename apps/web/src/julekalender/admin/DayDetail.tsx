@@ -12,7 +12,7 @@ import {
   type PlanOp,
   type Step,
 } from "@meling/shared";
-import { BrickBagList, UnplacedBricks } from "./Bricks";
+import { BrickBagList, UnplacedBricks, bricksText, fixSummary } from "./Bricks";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
@@ -100,7 +100,8 @@ export function DayDetail({
   const catalog = useMemo(() => brickCatalog([...pages.values()], manuals, plan.brickFixes), [pages, manuals, plan]);
   const extras = useMemo(() => plan.extraBricks.filter((b) => b.day === day), [plan, day]);
   const bag = useMemo(() => catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? [], extras), [catalog, plan, day, extras]);
-  // Bricks the parts list has more of than the bags: an adult can put them in this day's bag.
+  // Bricks the parts list has more of than the bags: an adult can put them in this day's bag, and they
+  // come first in the picker for correcting a match.
   const unplaced = useMemo(
     () => (catalog ? brickReconcile(catalog, plan).filter((d) => d.distributed < d.expected) : []),
     [catalog, plan],
@@ -160,7 +161,7 @@ export function DayDetail({
       <div className="card">
         <div className="card-head wrap">
           <h2>
-            Dag {day} · {row.label.replace(/^Trinn/, "trinn")} · {row.bricks} brikker
+            Dag {day} · {row.label.replace(/^Trinn/, "trinn")} · {bricksText(row.bricks)}
           </h2>
           <span className="muted small">{pageRanges.join(" · ")}</span>
         </div>
@@ -318,10 +319,10 @@ export function DayDetail({
                 busy={busy}
                 fix={{
                   choices: { missing: unplaced.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
-                  onFix: ({ manualId, page, index }, elementId) =>
+                  onFix: (callouts, elementId) =>
                     void onEdit(
-                      [{ type: "fixBrick", manualId, page, index, elementId }],
-                      elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+                      callouts.map(({ manualId, page, index }) => ({ type: "fixBrick", manualId, page, index, elementId })),
+                      fixSummary(callouts, elementId),
                     ),
                 }}
                 onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}

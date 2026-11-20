@@ -504,6 +504,11 @@ dialog.confirm .toolbar {
   }
 }
 
+.unplaced-row {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .plan-detail {
   min-width: 0;
   display: grid;
