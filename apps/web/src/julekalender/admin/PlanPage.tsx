@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { DOOR_COUNT, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
+import { DOOR_COUNT, brickCatalog, brickReconcile, reconcile, type PageDoc, type PlanOp } from "@meling/shared";
 import { editPlan, redraft } from "./api";
 import { DayDetail } from "./DayDetail";
 import {
@@ -57,6 +57,12 @@ export function PlanPage() {
       }),
     [manuals, pageDocs, steps],
   );
+
+  // With bricks read from the manuals, the check is exact (per element id) and shown on the packing list.
+  const brickDifferences = useMemo(() => {
+    const catalog = plan && brickCatalog(pageDocs, manuals);
+    return catalog ? brickReconcile(catalog, plan.days.flatMap((d) => d.stepIds)) : null;
+  }, [plan, pageDocs, manuals]);
 
   const parsedDay = Number(search.get("dag"));
   const day = Number.isInteger(parsedDay) && parsedDay >= 1 && parsedDay <= DOOR_COUNT ? parsedDay : 1;
@@ -220,7 +226,14 @@ export function PlanPage() {
 
             <div className="card">
               <h3>Delelisten</h3>
-              {discrepancies.length === 0 ? (
+              {brickDifferences ? (
+                <p className="muted">
+                  {brickDifferences.length === 0
+                    ? "Alle brikkene i delelisten er fordelt på en dag."
+                    : `${brickDifferences.length} brikketyper har et annet antall i posene enn i delelisten. `}
+                  {brickDifferences.length > 0 && <Link to={`/julekalender/admin/${calId}/pakkeliste`}>Se pakkelisten</Link>}
+                </p>
+              ) : discrepancies.length === 0 ? (
                 <p className="muted">Fant ingen deleliste i manualene, så antallet kan ikke kontrolleres.</p>
               ) : (
                 discrepancies.map(({ manual, lines }) => (

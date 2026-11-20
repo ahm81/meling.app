@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type CalendarDoc, DOOR_COUNT, type ManualDoc, type PageDoc, type Plan, paths, storagePaths } from "@meling/shared";
+import { type CalendarDoc, DOOR_COUNT, type ManualDoc, PageDoc, type Plan, paths, storagePaths } from "@meling/shared";
 import { deleteApp, initializeApp } from "firebase-admin/app";
 import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -11,13 +11,14 @@ import {
   deleteManualHandler,
   editPlanHandler,
   redraftHandler,
+  readBricksHandler,
   renderCutoutsHandler,
   restoreVersionHandler,
   retryManualHandler,
 } from "./callables";
 import { fakeAi } from "./gemini";
 import { makeFirstDraft, processManual } from "./pipeline";
-import { minimalPdf } from "./testing/minimal-pdf";
+import { minimalPdf, sampleBrickPdf } from "./testing/minimal-pdf";
 import { StaleVersionError, writeVersion } from "./versions";
 
 // Never the real project: these tests only run against the emulators started by `pnpm test:functions`.
@@ -625,6 +626,64 @@ describe("callables", () => {
       const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]!) <= 6);
       expect(near(at(20, 20), [0xc2, 0xc8, 0xcc])).toBe(true); // hidden: x 0–50, y 0–50
       expect(near(at(150, 80), [255, 255, 255])).toBe(true);
+    });
+  });
+
+  describe("readBricks", () => {
+    async function seedBrickManual(calId: string, status: ManualDoc["status"] = "done"): Promise<void> {
+      await bucket.file(storagePaths.manualPdf(calId, "m1")).save(sampleBrickPdf(), { contentType: "application/pdf" });
+      const manual: ManualDoc = {
+        order: 1,
+        fileName: "a.pdf",
+        storagePath: storagePaths.manualPdf(calId, "m1"),
+        status,
+        pageCount: 2,
+        pagesAnalyzed: 2,
+        setNumber: null,
+        error: null,
+      };
+      await db.doc(paths.manual(calId, "m1")).set(manual);
+      const page = (n: number, analysis: PageDoc["analysis"]): PageDoc => ({
+        manualId: "m1",
+        page: n,
+        imagePath: storagePaths.pageImage(calId, "m1", n),
+        width: 800,
+        height: 600,
+        analysis,
+      });
+      const half = (x: number) => ({ printedNumber: 1, bbox: { x, y: 0, w: 0.5, h: 1 }, parts: [] });
+      await db.doc(paths.page(calId, "m1", 1)).set(page(1, { kind: "instructions", steps: [half(0.5), half(0)], spoilers: [], inventory: [] }));
+      await db.doc(paths.page(calId, "m1", 2)).set(page(2, { kind: "inventory", steps: [], spoilers: [], inventory: [] }));
+    }
+
+    it("stores the bricks on the pages and their pictures, without touching the analysis", async () => {
+      const calId = await seedCalendar();
+      await seedBrickManual(calId);
+      // A picture from an earlier run that is no longer needed.
+      await bucket.file(storagePaths.brickImage(calId, "999999")).save(Buffer.from("x"));
+
+      expect(await readBricksHandler(deps(), as("amund", { calendarId: calId }))).toEqual({ elements: 5, unsure: 0 });
+
+      const page1 = PageDoc.parse((await db.doc(paths.page(calId, "m1", 1)).get()).data());
+      // Both bricks are in the left half of the page: the step that is first in reading order.
+      expect(page1.bricks?.callouts.map(({ elementId, qty, stepIndex, sure }) => [elementId, qty, stepIndex, sure])).toEqual([
+        ["300021", 4, 0, true],
+        ["300023", 2, 0, true],
+      ]);
+      expect(page1.analysis?.steps).toHaveLength(2);
+      const page2 = PageDoc.parse((await db.doc(paths.page(calId, "m1", 2)).get()).data());
+      expect(page2.bricks?.inventory).toHaveLength(5);
+      const [files] = await bucket.getFiles({ prefix: storagePaths.bricksDir(calId) });
+      expect(files.map((f) => f.name).sort()).toEqual(
+        ["300021", "300023", "300024", "300026", "300028"].map((id) => storagePaths.brickImage(calId, id)),
+      );
+    });
+
+    it("is for adults, and only when every manual is done", async () => {
+      const calId = await seedCalendar();
+      await seedBrickManual(calId, "analyzing");
+      await expect(readBricksHandler(deps(), as("ida", { calendarId: calId }))).rejects.toMatchObject({ code: "permission-denied" });
+      await expect(readBricksHandler(deps(), as("amund", { calendarId: calId }))).rejects.toMatchObject({ code: "failed-precondition" });
     });
   });
 });

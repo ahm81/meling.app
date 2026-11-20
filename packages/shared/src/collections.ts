@@ -23,8 +23,16 @@ export const storagePaths = {
     `${Collections.julekalender}/${calId}/pages/${manualId}/${page}.png`,
   cutout: (calId: string, stepId: string, maskKey: string) =>
     `${Collections.julekalender}/${calId}/cutouts/${stepId}/${maskKey}.webp`,
+  // The picture of a brick from the parts list, one per element id in the calendar.
+  brickImage: (calId: string, elementId: string) =>
+    `${Collections.julekalender}/${calId}/bricks/${elementId}.webp`,
+  // The picture of one brick in a step's parts box (only stored for uncertain matches). `index` is its
+  // position in the page's `bricks.callouts`.
+  calloutImage: (calId: string, manualId: string, page: number, index: number) =>
+    `${Collections.julekalender}/${calId}/bricks/callouts/${manualId}/${page}_${index}.webp`,
   // Folder prefixes (with trailing slash) for deleting a manual's derived files.
   pagesDir: (calId: string, manualId: string) =>
     `${Collections.julekalender}/${calId}/pages/${manualId}/`,
   cutoutsDir: (calId: string) => `${Collections.julekalender}/${calId}/cutouts/`,
+  bricksDir: (calId: string) => `${Collections.julekalender}/${calId}/bricks/`,
 };

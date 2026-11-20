@@ -59,6 +59,20 @@ og `updatedAt` (valgfri, bare functions). Klienten oppretter dokumentet med `sta
 **Side** (`PageDoc`): `manualId`, `page`, `imagePath` (PNG i Storage), `width`, `height` og `analysis`
 (AI-ens tolkning: sidetype, trinn med nummer, område og deler, spoilere og delelister). Bare functions skriver.
 
+`bricks` (valgfri) er brikkene lest rett fra PDF-en, uten AI. LEGO-manualer lagrer hver brikke som et eget bilde med
+antallet («2x») som tekst under, og delelisten bakerst har i tillegg brikkenummeret (element-ID). Feltet mangler til
+brikkene er lest, og har to lister som begge er tomme på sider uten brikker:
+
+- `inventory`: brikkene i delelisten på siden: `elementId`, `qty` og `bbox` (bildets plass på siden).
+- `callouts`: brikkene i brikkeboksene til trinnene: `qty`, `bbox`, `stepIndex` (indeksen i trinn-id-en til trinnet
+  brikken hører til, `null` hvis siden ikke har trinn), `elementId` (brikken i delelisten som ligner mest) og `sure`
+  (`false` når treffet er svakt og en voksen bør sjekke). `qty` er ganget opp for seksjoner manualen ber om å bygge
+  flere ganger (stor «2x»), når det får summen til å stemme med delelisten.
+
+Finnes det ingen deleliste i manualene, er `callouts` tom overalt, og pakkelisten bruker AI-ens beskrivelser
+(`analysis.steps[].parts`). Ellers bygger pakkelisten på `bricks`: en pose er summen per `elementId` for dagens trinn,
+og kontrollen mot delelisten er eksakt. Fordelingen (versjonene) og `analysis` endres aldri av brikkelesingen.
+
 **Versjon** (`VersionDoc`): `number`, `createdAt`, `author`, `summary` (maks 200 tegn), `plan` og `restoredFrom`.
 Versjoner er uforanderlige og skrives bare av functions; hver endring av fordelingen er en ny versjon.
 
@@ -93,6 +107,7 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 | `restoreVersion` | `{ calendarId, baseVersion, fromVersion }`: lager en ny versjon med planen til `fromVersion` og `restoredFrom` satt |
 | `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter). `baseVersion` er `null` når kalenderen ikke har noen versjon ennå (førsteutkastet feilet) |
 | `renderCutouts`  | `{ calendarId, version }`: lager utklippene til pakkelisten i Storage                        |
+| `readBricks`     | `{ calendarId }`: leser brikkene (bilder, brikkenumre og antall) fra PDF-ene på nytt og skriver `bricks` på sidene og bildene i Storage. Krever at alle manualene er ferdig lest. Kjøres også automatisk når siste manual er ferdig og når en manual slettes |
 | `retryManual`    | `{ calendarId, manualId }`: fortsetter rendering og analyse for en manual. Sider som allerede er analysert, og bildene deres, beholdes; bare de manglende sidene analyseres. Utklippene til manualen slettes |
 | `deleteManual`   | `{ calendarId, manualId }`: sletter manualen med sider, sidebilder, utklipp og PDF. Ikke mens den leses (med mindre den har stått fast i mer enn 15 minutter). Versjonene endres ikke; venter kalenderen på førsteutkastet og alle gjenværende manualer er lest, lages det |
 
@@ -107,6 +122,10 @@ Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for 
   `pages/{manualId}/` som slettes når en manual fjernes.
 - `julekalender/{calId}/cutouts/{stepId}/{maskKey}.webp`: utklipp til pakkelisten (functions). `cutoutsDir` er
   `cutouts/`.
+- `julekalender/{calId}/bricks/{elementId}.webp`: bildet av en brikke fra delelisten (functions).
+  `julekalender/{calId}/bricks/callouts/{manualId}/{side}_{indeks}.webp` er bildet fra brikkeboksen for brikker med
+  usikkert treff (`indeks` er plassen i sidens `bricks.callouts`). `bricksDir` er `bricks/`, som tømmes og fylles på
+  nytt hver gang brikkene leses.
 - `julekalender/{calId}/**` utenom manualene: voksne leser, ingen skriver fra klient (bare functions).
 - Stiene bygges av `storagePaths` i `packages/shared`. Storage-regler kan ikke kalle `isAdult()`; de leser
   `members/{uid}.role` via `firestore.get(...)`.

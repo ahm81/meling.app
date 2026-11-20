@@ -1,4 +1,4 @@
-import type { Part, Step } from "./julekalender";
+import { type PageDoc, type Part, type Step, stepId } from "./julekalender";
 
 const key = (p: { name: string; color: string }) => `${p.color}\u0000${p.name}`;
 const byColorThenName = (a: { name: string; color: string }, b: { name: string; color: string }) =>
@@ -40,4 +40,95 @@ export function reconcile(
     lines.set(k, line);
   }
   return [...lines.values()].filter((l) => l.expected !== l.distributed).sort(byColorThenName);
+}
+
+/** One brick in a step's parts box, with where it is so its picture can be found. */
+export interface PlacedCallout {
+  manualId: string;
+  page: number;
+  /** Position in the page's `bricks.callouts`. */
+  index: number;
+  /** The step it belongs to, or null when the page has no step for it. */
+  stepId: string | null;
+  elementId: string;
+  qty: number;
+  sure: boolean;
+}
+
+export interface BrickCatalog {
+  /** Element ids in the order the parts list shows them (manual order, page, position), with the set's count. */
+  inventory: { elementId: string; qty: number }[];
+  callouts: PlacedCallout[];
+}
+
+/**
+ * The bricks read from the PDFs of the given manuals, or null when no parts list was found (then the
+ * packing list falls back to the parts the AI read). A brick listed on several pages is counted once per page.
+ */
+export function brickCatalog(pages: PageDoc[], manuals: { id: string; order: number }[]): BrickCatalog | null {
+  const order = new Map(manuals.map((m) => [m.id, m.order]));
+  const sorted = pages
+    .filter((p) => order.has(p.manualId))
+    .sort((a, b) => order.get(a.manualId)! - order.get(b.manualId)! || a.page - b.page || a.manualId.localeCompare(b.manualId));
+  const inventory = new Map<string, number>();
+  const callouts: PlacedCallout[] = [];
+  for (const p of sorted) {
+    for (const b of p.bricks?.inventory ?? []) inventory.set(b.elementId, (inventory.get(b.elementId) ?? 0) + b.qty);
+    (p.bricks?.callouts ?? []).forEach((c, index) => {
+      callouts.push({
+        manualId: p.manualId,
+        page: p.page,
+        index,
+        stepId: c.stepIndex === null ? null : stepId(p.manualId, p.page, c.stepIndex),
+        elementId: c.elementId,
+        qty: c.qty,
+        sure: c.sure,
+      });
+    });
+  }
+  if (inventory.size === 0) return null;
+  return { inventory: [...inventory].map(([elementId, qty]) => ({ elementId, qty })), callouts };
+}
+
+export interface BrickBag {
+  /** Bricks matched with confidence, summed per element id, in the parts list's order. */
+  lines: { elementId: string; qty: number }[];
+  /** Bricks whose match is uncertain, one entry per parts box entry, so an adult can check each. */
+  unsure: PlacedCallout[];
+}
+
+/** The bricks needed for the given steps. */
+export function brickBag(catalog: BrickCatalog, stepIds: string[]): BrickBag {
+  const wanted = new Set(stepIds);
+  const qty = new Map<string, number>();
+  const unsure: PlacedCallout[] = [];
+  for (const c of catalog.callouts) {
+    if (c.stepId === null || !wanted.has(c.stepId)) continue;
+    if (c.sure) qty.set(c.elementId, (qty.get(c.elementId) ?? 0) + c.qty);
+    else unsure.push(c);
+  }
+  const position = new Map(catalog.inventory.map((b, i) => [b.elementId, i]));
+  const lines = [...qty]
+    .map(([elementId, n]) => ({ elementId, qty: n }))
+    .sort((a, b) => position.get(a.elementId)! - position.get(b.elementId)!);
+  return { lines, unsure };
+}
+
+/**
+ * Compares the parts list with the bricks in the given steps (normally every step in the plan). Returns the
+ * element ids whose counts differ, in the parts list's order: `expected` from the parts list, `distributed`
+ * in the steps (uncertain matches count as their best guess).
+ */
+export function brickReconcile(
+  catalog: BrickCatalog,
+  stepIds: string[],
+): { elementId: string; expected: number; distributed: number }[] {
+  const wanted = new Set(stepIds);
+  const distributed = new Map<string, number>();
+  for (const c of catalog.callouts) {
+    if (c.stepId !== null && wanted.has(c.stepId)) distributed.set(c.elementId, (distributed.get(c.elementId) ?? 0) + c.qty);
+  }
+  return catalog.inventory
+    .map((b) => ({ elementId: b.elementId, expected: b.qty, distributed: distributed.get(b.elementId) ?? 0 }))
+    .filter((l) => l.expected !== l.distributed);
 }

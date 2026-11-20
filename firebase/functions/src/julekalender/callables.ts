@@ -4,6 +4,7 @@ import { getStorage } from "firebase-admin/storage";
 import { logger } from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { z } from "zod";
+import { BricksNotReadyError, updateBricks } from "./bricks";
 import { FULL_PAGE, maskFor, maskKey, renderCutout } from "./cutouts";
 import { aiFromEnv } from "./gemini";
 import { InvalidOpError, applyOps } from "./ops";
@@ -19,6 +20,7 @@ import {
   pagesOf,
   processClaimedManual,
   safeUpdate,
+  updateBricksIfAllManualsDone,
   withDates,
 } from "./pipeline";
 import { StaleVersionError, writeVersion } from "./versions";
@@ -270,6 +272,8 @@ export async function deleteManualHandler({ db, bucket, ai }: CallableDeps, requ
     } catch (e) {
       logger.error("Could not start the first draft", { calId: calendarId, manualId, error: e });
     }
+    // The parts list may have been in the deleted manual, so the bricks are read again.
+    await updateBricksIfAllManualsDone({ db, bucket }, calendarId);
   }
   return { ok: true };
 }
@@ -330,6 +334,27 @@ export async function renderCutoutsHandler(
   return { cutouts };
 }
 
+// ---- readBricks
+
+const ReadBricksInput = z.object({ calendarId: Id });
+
+/**
+ * Reads the bricks from the calendar's manuals again: element ids and pictures from the parts list, and
+ * which of them each step needs. Does not use AI and changes neither the analysis nor any version.
+ */
+export async function readBricksHandler({ db, bucket }: CallableDeps, request: CallRequest): Promise<{ elements: number; unsure: number }> {
+  await requireAdult(db, request);
+  const { calendarId } = parseInput(ReadBricksInput, request.data);
+  await requireCalendar(db, calendarId);
+  try {
+    return await updateBricks({ db, bucket }, calendarId);
+  } catch (e) {
+    if (e instanceof BricksNotReadyError) throw new HttpsError("failed-precondition", e.message);
+    logger.error("readBricks failed", { calId: calendarId, error: e });
+    throw new HttpsError("internal", "Brikkene kunne ikke leses fra manualene.");
+  }
+}
+
 // ---- onCall wrappers (region europe-west1 from setGlobalOptions)
 
 const deps = (): CallableDeps => ({ db: getFirestore(), bucket: getStorage().bucket(), ai: aiFromEnv() });
@@ -341,3 +366,4 @@ export const redraft = onCall({ timeoutSeconds: 300 }, (request) => redraftHandl
 export const retryManual = onCall({ timeoutSeconds: 540, memory: "2GiB" }, (request) => retryManualHandler(deps(), request));
 export const deleteManual = onCall({ timeoutSeconds: 300 }, (request) => deleteManualHandler(deps(), request));
 export const renderCutouts = onCall({ timeoutSeconds: 300, memory: "1GiB" }, (request) => renderCutoutsHandler(deps(), request));
+export const readBricks = onCall({ timeoutSeconds: 300, memory: "2GiB" }, (request) => readBricksHandler(deps(), request));

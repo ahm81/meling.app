@@ -52,3 +52,73 @@ export async function* renderPdf(
     doc.destroy();
   }
 }
+
+/** A box in PDF points, relative to the page's top-left corner. */
+export type PtBox = { x0: number; y0: number; x1: number; y1: number };
+export type PdfText = { text: string; box: PtBox; fontSize: number };
+
+/**
+ * The text lines and pictures of each page as the PDF stores them (no OCR), one page at a time.
+ * `render(scale)` gives the page as a PNG; it is only valid until the next page is requested.
+ */
+export async function* pdfLayout(pdf: Buffer): AsyncGenerator<{
+  page: number;
+  width: number;
+  height: number;
+  texts: PdfText[];
+  images: PtBox[];
+  render: (scale: number) => Buffer;
+}> {
+  const mupdf = await loadMupdf();
+  let doc: Mupdf.Document;
+  let count: number;
+  try {
+    doc = mupdf.Document.openDocument(pdf, "application/pdf");
+    count = doc.countPages();
+  } catch (e) {
+    throw new PdfReadError(e);
+  }
+  try {
+    for (let i = 0; i < count; i++) {
+      const page = doc.loadPage(i);
+      let stext: Mupdf.StructuredText | undefined;
+      try {
+        const [left, top, right, bottom] = page.getBounds();
+        const box = ([x0, y0, x1, y1]: Mupdf.Rect): PtBox => ({ x0: x0 - left, y0: y0 - top, x1: x1 - left, y1: y1 - top });
+        const texts: PdfText[] = [];
+        const images: PtBox[] = [];
+        let line: PdfText | null = null;
+        stext = page.toStructuredText("preserve-images");
+        stext.walk({
+          onImageBlock: (bbox) => void images.push(box(bbox)),
+          beginLine: (bbox) => void (line = { text: "", box: box(bbox), fontSize: 0 }),
+          onChar: (c, _origin, _font, size) => {
+            if (!line) return;
+            line.text += c;
+            line.fontSize = Math.max(line.fontSize, size);
+          },
+          endLine: () => {
+            if (line) texts.push(line);
+            line = null;
+          },
+        });
+        const render = (scale: number) => {
+          const pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false, true);
+          try {
+            return Buffer.from(pixmap.asPNG());
+          } finally {
+            pixmap.destroy();
+          }
+        };
+        yield { page: i + 1, width: right - left, height: bottom - top, texts, images, render };
+      } catch (e) {
+        throw e instanceof PdfReadError ? e : new PdfReadError(e);
+      } finally {
+        stext?.destroy();
+        page.destroy();
+      }
+    }
+  } finally {
+    doc.destroy();
+  }
+}

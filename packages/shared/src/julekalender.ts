@@ -145,6 +145,27 @@ export const ManualDoc = z.object({
 });
 export type ManualDoc = z.infer<typeof ManualDoc>;
 
+// A brick in the manual's parts list (the inventory at the back): its element id, how many the set has,
+// and where its picture is on the page.
+export const InventoryBrick = z.object({ elementId: z.string().min(1), qty: z.int().min(1), bbox: Bbox });
+export type InventoryBrick = z.infer<typeof InventoryBrick>;
+
+// A brick in a step's parts box: how many, and where its picture is on the page. `stepIndex` is the index of
+// the step it belongs to (as in the step id), null when the page has no step for it. `elementId` is the
+// inventory brick that looks most like it; `sure` is false when that match is weak and an adult should check.
+export const BrickCallout = z.object({
+  qty: z.int().min(1),
+  bbox: Bbox,
+  stepIndex: z.int().min(0).nullable(),
+  elementId: z.string().min(1),
+  sure: z.boolean(),
+});
+export type BrickCallout = z.infer<typeof BrickCallout>;
+
+// The bricks read from the PDF's own text and pictures (no AI). Both lists are empty on pages without any.
+export const PageBricks = z.object({ inventory: z.array(InventoryBrick), callouts: z.array(BrickCallout) });
+export type PageBricks = z.infer<typeof PageBricks>;
+
 export const PageDoc = z.object({
   manualId: z.string(),
   page: z.int(),
@@ -152,6 +173,8 @@ export const PageDoc = z.object({
   width: z.int(),
   height: z.int(),
   analysis: PageAnalysis.nullable(),
+  // Missing until the bricks have been read (readBricks); null is not used.
+  bricks: PageBricks.optional(),
 });
 export type PageDoc = z.infer<typeof PageDoc>;
 
