@@ -12,7 +12,7 @@ import {
   type PlanOp,
   type Step,
 } from "@meling/shared";
-import { BrickBagList, UnplacedBricks, fixSummary } from "./Bricks";
+import { BrickBagList, bricksText, fixSummary } from "./Bricks";
 import { RegionPicker, type PickerPage } from "./RegionPicker";
 import {
   boxStyle,
@@ -100,7 +100,7 @@ export function DayDetail({
   const catalog = useMemo(() => brickCatalog([...pages.values()], manuals, plan.brickFixes), [pages, manuals, plan]);
   const extras = useMemo(() => plan.extraBricks.filter((b) => b.day === day), [plan, day]);
   const bag = useMemo(() => catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? [], extras), [catalog, plan, day, extras]);
-  // Bricks the parts list has more of than the bags: an adult can put them in this day's bag.
+  // The bricks the bags are short of come first in the picker for correcting a match.
   const unplaced = useMemo(
     () => (catalog ? brickReconcile(catalog, plan).filter((d) => d.distributed < d.expected) : []),
     [catalog, plan],
@@ -160,7 +160,7 @@ export function DayDetail({
       <div className="card">
         <div className="card-head wrap">
           <h2>
-            Dag {day} · {row.label.replace(/^Trinn/, "trinn")} · {row.bricks} brikker
+            Dag {day} · {row.label.replace(/^Trinn/, "trinn")} · {bricksText(row.bricks)}
           </h2>
           <span className="muted small">{pageRanges.join(" · ")}</span>
         </div>
@@ -326,23 +326,6 @@ export function DayDetail({
                 }}
                 onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}
               />
-              {unplaced.length > 0 && (
-                <div className="place-here no-print">
-                  <strong className="small">Brikker som ikke ligger i noen pose</strong>
-                  <span className="muted small">
-                    Trykk på en brikke som bygges denne dagen (se sidene over) for å legge den i posen.
-                  </span>
-                  <UnplacedBricks
-                    calId={calId}
-                    bricks={unplaced.map((d) => ({ elementId: d.elementId, left: d.expected - d.distributed }))}
-                    busy={busy}
-                    onPlace={(elementId) => {
-                      const placed = extras.find((b) => b.elementId === elementId)?.qty ?? 0;
-                      placeBrick(elementId, placed + 1, `La 1× ${elementId} i pose ${day}`);
-                    }}
-                  />
-                </div>
-              )}
             </>
           ) : parts.length === 0 ? (
             <p className="muted">Ingen brikker funnet for denne dagen.</p>
