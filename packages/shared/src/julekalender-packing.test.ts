@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brickBag, brickCatalog, brickReconcile, packingList, reconcile, stepIndexAt, type PageAnalysis, type PageDoc, type Part, type Step } from "./index";
+import { DOOR_COUNT, brickBag, brickBags, brickCatalog, brickReconcile, packingList, reconcile, stepIndexAt, type PageAnalysis, type PageDoc, type Part, type Plan, type Step } from "./index";
 
 const step = (id: string, parts: Part[]): Step => ({
   id,
@@ -87,16 +87,33 @@ describe("bricks", () => {
     expect(catalog.callouts.map((c) => c.stepId)).toEqual(["m1:1:0", "m1:1:1", null, "m2:1:0", "m2:1:0"]);
   });
 
+  const planOf = (stepIds: string[], extraBricks: Plan["extraBricks"] = []): Plan => ({
+    days: Array.from({ length: DOOR_COUNT }, (_, i) => ({ stepIds: i === 0 ? stepIds : [] })),
+    hidden: [],
+    wholePages: [],
+    extraBricks,
+  });
+
   it("sums a bag per element in the parts list's order and keeps unsure bricks apart", () => {
     const bag = brickBag(brickCatalog(pages, manuals)!, ["m2:1:0", "m1:1:0", "m1:1:1"]);
-    expect(bag.lines).toEqual([{ elementId: "300", qty: 3 }, { elementId: "100", qty: 1 }]);
+    expect(bag.lines).toEqual([{ elementId: "300", qty: 3, extra: 0 }, { elementId: "100", qty: 1, extra: 0 }]);
     expect(bag.unsure.map((c) => [c.elementId, c.qty, c.page, c.index])).toEqual([["300", 1, 1, 1]]);
   });
 
-  it("reconciles the distributed steps with the parts list", () => {
+  it("adds the bricks placed by hand to their day's bag", () => {
     const catalog = brickCatalog(pages, manuals)!;
-    expect(brickReconcile(catalog, ["m1:1:0", "m1:1:1", "m2:1:0"])).toEqual([{ elementId: "200", expected: 2, distributed: 0 }]);
-    expect(brickReconcile(catalog, ["m1:1:0"])).toEqual([
+    const plan = planOf(["m1:1:0"], [{ elementId: "200", day: 1, qty: 2 }, { elementId: "300", day: 1, qty: 1 }, { elementId: "100", day: 2, qty: 1 }]);
+    const bags = brickBags(catalog, plan);
+    expect(bags[0]!.lines).toEqual([{ elementId: "300", qty: 3, extra: 1 }, { elementId: "200", qty: 2, extra: 2 }]);
+    expect(bags[1]!.lines).toEqual([{ elementId: "100", qty: 1, extra: 1 }]);
+    expect(bags[2]!.lines).toEqual([]);
+  });
+
+  it("reconciles the bags with the parts list", () => {
+    const catalog = brickCatalog(pages, manuals)!;
+    expect(brickReconcile(catalog, planOf(["m1:1:0", "m1:1:1", "m2:1:0"]))).toEqual([{ elementId: "200", expected: 2, distributed: 0 }]);
+    expect(brickReconcile(catalog, planOf(["m1:1:0", "m1:1:1", "m2:1:0"], [{ elementId: "200", day: 5, qty: 2 }]))).toEqual([]);
+    expect(brickReconcile(catalog, planOf(["m1:1:0"]))).toEqual([
       { elementId: "300", expected: 4, distributed: 2 },
       { elementId: "100", expected: 1, distributed: 0 },
       { elementId: "200", expected: 2, distributed: 0 },

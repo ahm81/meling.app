@@ -50,6 +50,7 @@ describe("wholePageSteps", () => {
         { manualId: "m1", page: 5 },
         { manualId: "m1", page: 9 },
       ],
+      extraBricks: [],
     };
     expect(wholePageSteps(plan, steps)).toEqual([{ manualId: "m1", page: 4, day: 1, stepIds: ["a", "b"] }]);
   });

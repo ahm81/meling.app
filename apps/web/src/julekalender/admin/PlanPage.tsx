@@ -61,7 +61,7 @@ export function PlanPage() {
   // With bricks read from the manuals, the check is exact (per element id) and shown on the packing list.
   const brickDifferences = useMemo(() => {
     const catalog = plan && brickCatalog(pageDocs, manuals);
-    return catalog ? brickReconcile(catalog, plan.days.flatMap((d) => d.stepIds)) : null;
+    return catalog ? brickReconcile(catalog, plan) : null;
   }, [plan, pageDocs, manuals]);
 
   const parsedDay = Number(search.get("dag"));

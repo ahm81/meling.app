@@ -1,4 +1,4 @@
-import { type PageDoc, type Part, type Step, stepId } from "./julekalender";
+import { type ExtraBrick, type PageDoc, type Part, type Plan, type Step, stepId } from "./julekalender";
 
 const key = (p: { name: string; color: string }) => `${p.color}\u0000${p.name}`;
 const byColorThenName = (a: { name: string; color: string }, b: { name: string; color: string }) =>
@@ -91,43 +91,58 @@ export function brickCatalog(pages: PageDoc[], manuals: { id: string; order: num
 }
 
 export interface BrickBag {
-  /** Bricks matched with confidence, summed per element id, in the parts list's order. */
-  lines: { elementId: string; qty: number }[];
+  /**
+   * Bricks summed per element id, in the parts list's order: those matched with confidence in the steps'
+   * parts boxes plus those placed by hand (`extra` of the `qty`).
+   */
+  lines: { elementId: string; qty: number; extra: number }[];
   /** Bricks whose match is uncertain, one entry per parts box entry, so an adult can check each. */
   unsure: PlacedCallout[];
 }
 
-/** The bricks needed for the given steps. */
-export function brickBag(catalog: BrickCatalog, stepIds: string[]): BrickBag {
+/** The bricks needed for the given steps, plus the bricks placed by hand in that bag. */
+export function brickBag(catalog: BrickCatalog, stepIds: string[], extras: ExtraBrick[] = []): BrickBag {
   const wanted = new Set(stepIds);
-  const qty = new Map<string, number>();
+  const lines = new Map<string, { elementId: string; qty: number; extra: number }>();
+  const add = (elementId: string, qty: number, extra: number) => {
+    const line = lines.get(elementId) ?? { elementId, qty: 0, extra: 0 };
+    lines.set(elementId, { elementId, qty: line.qty + qty, extra: line.extra + extra });
+  };
   const unsure: PlacedCallout[] = [];
   for (const c of catalog.callouts) {
     if (c.stepId === null || !wanted.has(c.stepId)) continue;
-    if (c.sure) qty.set(c.elementId, (qty.get(c.elementId) ?? 0) + c.qty);
+    if (c.sure) add(c.elementId, c.qty, 0);
     else unsure.push(c);
   }
+  for (const e of extras) add(e.elementId, e.qty, e.qty);
   const position = new Map(catalog.inventory.map((b, i) => [b.elementId, i]));
-  const lines = [...qty]
-    .map(([elementId, n]) => ({ elementId, qty: n }))
-    .sort((a, b) => position.get(a.elementId)! - position.get(b.elementId)!);
-  return { lines, unsure };
+  const last = catalog.inventory.length;
+  return {
+    lines: [...lines.values()].sort((a, b) => (position.get(a.elementId) ?? last) - (position.get(b.elementId) ?? last)),
+    unsure,
+  };
+}
+
+/** The bag of every day in the plan. */
+export function brickBags(catalog: BrickCatalog, plan: Plan): BrickBag[] {
+  return plan.days.map((d, i) => brickBag(catalog, d.stepIds, plan.extraBricks.filter((e) => e.day === i + 1)));
 }
 
 /**
- * Compares the parts list with the bricks in the given steps (normally every step in the plan). Returns the
- * element ids whose counts differ, in the parts list's order: `expected` from the parts list, `distributed`
- * in the steps (uncertain matches count as their best guess).
+ * Compares the parts list with the bricks in the plan's bags. Returns the element ids whose counts differ,
+ * in the parts list's order: `expected` from the parts list, `distributed` in the bags (uncertain matches
+ * count as their best guess, and bricks placed by hand count too).
  */
 export function brickReconcile(
   catalog: BrickCatalog,
-  stepIds: string[],
+  plan: Plan,
 ): { elementId: string; expected: number; distributed: number }[] {
-  const wanted = new Set(stepIds);
+  const wanted = new Set(plan.days.flatMap((d) => d.stepIds));
   const distributed = new Map<string, number>();
   for (const c of catalog.callouts) {
     if (c.stepId !== null && wanted.has(c.stepId)) distributed.set(c.elementId, (distributed.get(c.elementId) ?? 0) + c.qty);
   }
+  for (const e of plan.extraBricks) distributed.set(e.elementId, (distributed.get(e.elementId) ?? 0) + e.qty);
   return catalog.inventory
     .map((b) => ({ elementId: b.elementId, expected: b.qty, distributed: distributed.get(b.elementId) ?? 0 }))
     .filter((l) => l.expected !== l.distributed);

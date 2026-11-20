@@ -30,7 +30,7 @@ const db = getFirestore(app);
 const bucket = getStorage(app).bucket();
 afterAll(() => deleteApp(app));
 
-const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [] });
+const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [], extraBricks: [] });
 
 async function seedCalendar(overrides: Partial<CalendarDoc> = {}): Promise<string> {
   const calId = `2026-${randomUUID()}`;
@@ -627,6 +627,22 @@ describe("callables", () => {
       expect(near(at(20, 20), [0xc2, 0xc8, 0xcc])).toBe(true); // hidden: x 0–50, y 0–50
       expect(near(at(150, 80), [255, 255, 255])).toBe(true);
     });
+  });
+
+  it("editPlan places a brick by hand and redraft keeps it", async () => {
+    const calId = await seedCalendar();
+    await seedAnalyzedManual(calId, 12);
+    await makeFirstDraft(db, fakeAi({}), calId);
+    const { version } = await editPlanHandler(
+      deps(),
+      as("amund", { calendarId: calId, baseVersion: 1, ops: [{ type: "placeBrick", elementId: "6135157", day: 3, qty: 2 }], summary: "La 2× 6135157 i pose 3" }),
+    );
+    expect(version).toBe(2);
+    const placed = [{ elementId: "6135157", day: 3, qty: 2 }];
+    expect(((await versions(calId))[1]!.data().plan as Plan).extraBricks).toEqual(placed);
+
+    await redraftHandler(deps(), as("amund", { calendarId: calId, baseVersion: 2 }));
+    expect(((await versions(calId))[2]!.data().plan as Plan).extraBricks).toEqual(placed);
   });
 
   describe("readBricks", () => {

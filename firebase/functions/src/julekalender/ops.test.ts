@@ -20,7 +20,7 @@ const makePlan = (): { plan: Plan; steps: Step[] } => {
   days[4] = { stepIds: ["a", "b", "c"] };
   days[5] = { stepIds: ["d"] };
   const ids = days.flatMap((d) => d.stepIds);
-  return { plan: { days, hidden: [], wholePages: [] }, steps: ids.map(step) };
+  return { plan: { days, hidden: [], wholePages: [], extraBricks: [] }, steps: ids.map(step) };
 };
 
 const hidden: Hidden = { id: "h1", manualId: "m1", page: 2, bbox: null, label: "Forside", source: "adult" };
@@ -163,6 +163,35 @@ describe("applyOps", () => {
       const out = applyOps(withPage, onPages(steps), [{ type: "moveStep", stepId: "c", toDay: 6 }]);
       expect(out.wholePages).toEqual([{ manualId: "m1", page: 3 }]);
       expect(withPage).toEqual(copy);
+    });
+  });
+
+  describe("placeBrick", () => {
+    it("sets, changes and removes a brick placed by hand", () => {
+      const { plan, steps } = makePlan();
+      const placed = applyOps(plan, steps, [
+        { type: "placeBrick", elementId: "6135157", day: 3, qty: 1 },
+        { type: "placeBrick", elementId: "6135157", day: 4, qty: 2 },
+        { type: "placeBrick", elementId: "6135157", day: 3, qty: 5 },
+      ]);
+      expect(placed.extraBricks).toEqual([
+        { elementId: "6135157", day: 4, qty: 2 },
+        { elementId: "6135157", day: 3, qty: 5 },
+      ]);
+      expect(plan.extraBricks).toEqual([]);
+      const removed = applyOps(placed, steps, [{ type: "placeBrick", elementId: "6135157", day: 3, qty: 0 }]);
+      expect(removed.extraBricks).toEqual([{ elementId: "6135157", day: 4, qty: 2 }]);
+    });
+
+    it("rejects removing a brick that is not there", () => {
+      const { plan, steps } = makePlan();
+      expect(() => applyOps(plan, steps, [{ type: "placeBrick", elementId: "6135157", day: 3, qty: 0 }])).toThrow(InvalidOpError);
+    });
+
+    it("keeps the placed bricks through other edits", () => {
+      const { plan, steps } = makePlan();
+      const withBrick: Plan = { ...plan, extraBricks: [{ elementId: "6135157", day: 3, qty: 1 }] };
+      expect(applyOps(withBrick, steps, [{ type: "moveStep", stepId: "c", toDay: 6 }]).extraBricks).toEqual(withBrick.extraBricks);
     });
   });
 });

@@ -32,7 +32,20 @@ export function BrickLine({
 }
 
 /** The bricks of one bag: sure matches per element id, then the uncertain ones with the step's own picture. */
-export function BrickBagList({ calId, bag, tick }: { calId: string; bag: BrickBag; tick?: boolean }) {
+export function BrickBagList({
+  calId,
+  bag,
+  tick,
+  busy,
+  onRemove,
+}: {
+  calId: string;
+  bag: BrickBag;
+  tick?: boolean;
+  busy?: boolean;
+  /** Takes the bricks placed by hand out of the bag again. */
+  onRemove?: (elementId: string, qty: number) => void;
+}) {
   const urls = useDownloadUrls([
     ...bag.lines.map((l) => storagePaths.brickImage(calId, l.elementId)),
     ...bag.unsure.map((c) => calloutPath(calId, c)),
@@ -41,7 +54,18 @@ export function BrickBagList({ calId, bag, tick }: { calId: string; bag: BrickBa
   return (
     <ul className="part-list">
       {bag.lines.map((l) => (
-        <BrickLine key={l.elementId} url={urls[storagePaths.brickImage(calId, l.elementId)]} elementId={l.elementId} tick={tick}>
+        <BrickLine
+          key={l.elementId}
+          url={urls[storagePaths.brickImage(calId, l.elementId)]}
+          elementId={l.elementId}
+          note={l.extra > 0 ? (l.extra === l.qty ? "lagt til for hånd" : `${l.extra} lagt til for hånd`) : undefined}
+          tick={tick}
+        >
+          {l.extra > 0 && onRemove && (
+            <button className="link-button no-print" disabled={busy} onClick={() => onRemove(l.elementId, l.extra)}>
+              Fjern
+            </button>
+          )}
           <strong>{l.qty}×</strong>
         </BrickLine>
       ))}
