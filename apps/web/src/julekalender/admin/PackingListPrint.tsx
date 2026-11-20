@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
-import { DOOR_COUNT, brickBags, brickCatalog, brickReconcile, packingList, storagePaths } from "@meling/shared";
+import {
+  DOOR_COUNT,
+  brickBags,
+  brickCatalog,
+  brickReconcile,
+  packingList,
+  storagePaths,
+  type PlacedCallout,
+  type PlanOp,
+} from "@meling/shared";
 import { editPlan, readBricks } from "./api";
 import { BrickBagList, BrickLine, bagCount, bricksText } from "./Bricks";
 import { PartLine } from "./DayDetail";
@@ -26,7 +35,7 @@ export function PackingListPrint() {
   const steps = useMemo(() => buildSteps(pageDocs, manuals), [pageDocs, manuals]);
   const plan =
     calendar && currentVersion && currentVersion.number === calendar.currentVersion ? currentVersion.plan : null;
-  const catalog = useMemo(() => brickCatalog(pageDocs, manuals), [pageDocs, manuals]);
+  const catalog = useMemo(() => brickCatalog(pageDocs, manuals, plan?.brickFixes), [pageDocs, manuals, plan]);
   const textBags = useMemo(() => (plan ? plan.days.map((d) => packingList(steps, d.stepIds)) : []), [plan, steps]);
   const bags = useMemo(() => (plan && catalog ? brickBags(catalog, plan) : []), [plan, catalog]);
   const differences = useMemo(() => (plan && catalog ? brickReconcile(catalog, plan) : []), [plan, catalog]);
@@ -58,18 +67,13 @@ export function PackingListPrint() {
   // How many of each missing brick to place; defaults to all that are missing.
   const [amounts, setAmounts] = useState<Record<string, number>>({});
 
-  /** Sets how many of a brick are placed by hand in a day's bag (0 takes them out) as a new version. */
-  async function place(elementId: string, day: number, qty: number, summary: string) {
+  /** Saves one edit of the bricks as a new version. */
+  async function edit(op: PlanOp, summary: string) {
     if (!calendar || calendar.currentVersion === null || placing) return;
     setPlacing(true);
     setPlaceError(null);
     try {
-      await editPlan({
-        calendarId: calId,
-        baseVersion: calendar.currentVersion,
-        ops: [{ type: "placeBrick", elementId, day, qty }],
-        summary,
-      });
+      await editPlan({ calendarId: calId, baseVersion: calendar.currentVersion, ops: [op], summary });
     } catch (e) {
       console.error("editPlan", e);
       setPlaceError(callableError(e).message);
@@ -77,6 +81,17 @@ export function PackingListPrint() {
       setPlacing(false);
     }
   }
+  /** Sets how many of a brick are placed by hand in a day's bag (0 takes them out). */
+  const place = (elementId: string, day: number, qty: number, summary: string) =>
+    edit({ type: "placeBrick", elementId, day, qty }, summary);
+  const fix = {
+    choices: { missing: missing.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
+    onFix: ({ manualId, page, index }: PlacedCallout, elementId: string | null) =>
+      void edit(
+        { type: "fixBrick", manualId, page, index, elementId },
+        elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+      ),
+  };
   const placedIn = (elementId: string, day: number) =>
     plan?.extraBricks.find((b) => b.elementId === elementId && b.day === day)?.qty ?? 0;
 
@@ -148,6 +163,11 @@ export function PackingListPrint() {
           <p className="print-only">
             Julekalender {calendar.year} – {calendar.childName} (versjon {calendar.currentVersion})
           </p>
+          {placeError && (
+            <p role="alert" className="no-print">
+              {placeError}
+            </p>
+          )}
           {catalog && (
             <p className="muted">
               Delelisten har {total} brikker. {inBags} ligger i en pose
@@ -185,6 +205,7 @@ export function PackingListPrint() {
                     bag={bag}
                     tick
                     busy={placing}
+                    fix={fix}
                     onRemove={(elementId, qty) => place(elementId, i + 1, 0, `Tok ${qty}× ${elementId} ut av pose ${i + 1}`)}
                   />
                 </section>
@@ -209,7 +230,6 @@ export function PackingListPrint() {
                 Brikker delelisten har flere av enn byggetrinnene viser, for eksempel figurdeler. Velg posen de skal
                 i, der de bygges.
               </p>
-              {placeError && <p role="alert">{placeError}</p>}
               <ul className="part-list brick-columns">
                 {missing.map((d) => {
                   const left = d.expected - d.distributed;

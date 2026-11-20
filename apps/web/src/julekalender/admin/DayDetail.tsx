@@ -97,7 +97,7 @@ export function DayDetail({
 
   const parts = useMemo(() => packingList(steps, plan.days[day - 1]?.stepIds ?? []), [steps, plan, day]);
   // With bricks read from the manuals, the packing list shows their pictures and element ids instead.
-  const catalog = useMemo(() => brickCatalog([...pages.values()], manuals), [pages, manuals]);
+  const catalog = useMemo(() => brickCatalog([...pages.values()], manuals, plan.brickFixes), [pages, manuals, plan]);
   const extras = useMemo(() => plan.extraBricks.filter((b) => b.day === day), [plan, day]);
   const bag = useMemo(() => catalog && brickBag(catalog, plan.days[day - 1]?.stepIds ?? [], extras), [catalog, plan, day, extras]);
   // Bricks the parts list has more of than the bags: an adult can put them in this day's bag.
@@ -316,6 +316,14 @@ export function DayDetail({
                 calId={calId}
                 bag={bag}
                 busy={busy}
+                fix={{
+                  choices: { missing: unplaced.map((d) => d.elementId), all: catalog?.inventory.map((b) => b.elementId) ?? [] },
+                  onFix: ({ manualId, page, index }, elementId) =>
+                    void onEdit(
+                      [{ type: "fixBrick", manualId, page, index, elementId }],
+                      elementId ? `Rettet en brikke på side ${page} til ${elementId}` : `Angret rettingen av en brikke på side ${page}`,
+                    ),
+                }}
                 onRemove={(elementId, qty) => placeBrick(elementId, 0, `Tok ${qty}× ${elementId} ut av pose ${day}`)}
               />
               {unplaced.length > 0 && (

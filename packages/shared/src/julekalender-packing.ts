@@ -1,4 +1,4 @@
-import { type ExtraBrick, type PageDoc, type Part, type Plan, type Step, stepId } from "./julekalender";
+import { type BrickFix, type ExtraBrick, type PageDoc, type Part, type Plan, type Step, stepId } from "./julekalender";
 
 const key = (p: { name: string; color: string }) => `${p.color}\u0000${p.name}`;
 const byColorThenName = (a: { name: string; color: string }, b: { name: string; color: string }) =>
@@ -53,6 +53,8 @@ export interface PlacedCallout {
   elementId: string;
   qty: number;
   sure: boolean;
+  /** An adult said which brick this is (then `sure` is true and `elementId` is their answer). */
+  fixed: boolean;
 }
 
 export interface BrickCatalog {
@@ -64,8 +66,15 @@ export interface BrickCatalog {
 /**
  * The bricks read from the PDFs of the given manuals, or null when no parts list was found (then the
  * packing list falls back to the parts the AI read). A brick listed on several pages is counted once per page.
+ * `fixes` are the adults' answers to which brick a parts box entry is; they replace the automatic match.
  */
-export function brickCatalog(pages: PageDoc[], manuals: { id: string; order: number }[]): BrickCatalog | null {
+export function brickCatalog(
+  pages: PageDoc[],
+  manuals: { id: string; order: number }[],
+  fixes: BrickFix[] = [],
+): BrickCatalog | null {
+  const fixKey = (manualId: string, page: number, index: number) => `${manualId}/${page}/${index}`;
+  const fixed = new Map(fixes.map((f) => [fixKey(f.manualId, f.page, f.index), f.elementId]));
   const order = new Map(manuals.map((m) => [m.id, m.order]));
   const sorted = pages
     .filter((p) => order.has(p.manualId))
@@ -75,14 +84,16 @@ export function brickCatalog(pages: PageDoc[], manuals: { id: string; order: num
   for (const p of sorted) {
     for (const b of p.bricks?.inventory ?? []) inventory.set(b.elementId, (inventory.get(b.elementId) ?? 0) + b.qty);
     (p.bricks?.callouts ?? []).forEach((c, index) => {
+      const answer = fixed.get(fixKey(p.manualId, p.page, index));
       callouts.push({
         manualId: p.manualId,
         page: p.page,
         index,
         stepId: c.stepIndex === null ? null : stepId(p.manualId, p.page, c.stepIndex),
-        elementId: c.elementId,
+        elementId: answer ?? c.elementId,
         qty: c.qty,
-        sure: c.sure,
+        sure: c.sure || answer !== undefined,
+        fixed: answer !== undefined,
       });
     });
   }
@@ -98,6 +109,8 @@ export interface BrickBag {
   lines: { elementId: string; qty: number; extra: number }[];
   /** Bricks whose match is uncertain, one entry per parts box entry, so an adult can check each. */
   unsure: PlacedCallout[];
+  /** Parts box entries an adult has corrected (already counted in `lines`), so the answer can be taken back. */
+  fixed: PlacedCallout[];
 }
 
 /** The bricks needed for the given steps, plus the bricks placed by hand in that bag. */
@@ -109,10 +122,12 @@ export function brickBag(catalog: BrickCatalog, stepIds: string[], extras: Extra
     lines.set(elementId, { elementId, qty: line.qty + qty, extra: line.extra + extra });
   };
   const unsure: PlacedCallout[] = [];
+  const fixed: PlacedCallout[] = [];
   for (const c of catalog.callouts) {
     if (c.stepId === null || !wanted.has(c.stepId)) continue;
     if (c.sure) add(c.elementId, c.qty, 0);
     else unsure.push(c);
+    if (c.fixed) fixed.push(c);
   }
   for (const e of extras) add(e.elementId, e.qty, e.qty);
   const position = new Map(catalog.inventory.map((b, i) => [b.elementId, i]));
@@ -120,10 +135,11 @@ export function brickBag(catalog: BrickCatalog, stepIds: string[], extras: Extra
   return {
     lines: [...lines.values()].sort((a, b) => (position.get(a.elementId) ?? last) - (position.get(b.elementId) ?? last)),
     unsure,
+    fixed,
   };
 }
 
-/** The bag of every day in the plan. */
+/** The bag of every day in the plan. The catalog must be built with the plan's brickFixes. */
 export function brickBags(catalog: BrickCatalog, plan: Plan): BrickBag[] {
   return plan.days.map((d, i) => brickBag(catalog, d.stepIds, plan.extraBricks.filter((e) => e.day === i + 1)));
 }

@@ -60,7 +60,7 @@ export function PlanPage() {
 
   // With bricks read from the manuals, the check is exact (per element id) and shown on the packing list.
   const brickDifferences = useMemo(() => {
-    const catalog = plan && brickCatalog(pageDocs, manuals);
+    const catalog = plan && brickCatalog(pageDocs, manuals, plan.brickFixes);
     return catalog ? brickReconcile(catalog, plan) : null;
   }, [plan, pageDocs, manuals]);
 

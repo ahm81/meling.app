@@ -66,6 +66,16 @@ export const ExtraBrick = z.object({
 });
 export type ExtraBrick = z.infer<typeof ExtraBrick>;
 
+// An adult's answer to which brick a parts box entry really is, where the automatic match was uncertain.
+// `index` is the entry's position in the page's `bricks.callouts`. At most one per entry.
+export const BrickFix = z.object({
+  manualId: z.string(),
+  page: z.int().min(1),
+  index: z.int().min(0),
+  elementId: ExtraBrick.shape.elementId,
+});
+export type BrickFix = z.infer<typeof BrickFix>;
+
 export const Plan = z.object({
   days: z.array(z.object({ stepIds: z.array(z.string()) })).length(DOOR_COUNT),
   hidden: z.array(Hidden),
@@ -73,6 +83,8 @@ export const Plan = z.object({
   wholePages: z.array(WholePage).default([]),
   // Missing in versions written before bricks could be placed by hand.
   extraBricks: z.array(ExtraBrick).default([]),
+  // Missing in versions written before matches could be corrected.
+  brickFixes: z.array(BrickFix).default([]),
 });
 export type Plan = z.infer<typeof Plan>;
 
@@ -106,6 +118,14 @@ export const PlanOp = z.discriminatedUnion("type", [
     elementId: ExtraBrick.shape.elementId,
     day: ExtraBrick.shape.day,
     qty: z.int().min(0).max(99),
+  }),
+  // Says which brick a parts box entry is; elementId null takes the answer back.
+  z.object({
+    type: z.literal("fixBrick"),
+    manualId: z.string(),
+    page: z.int().min(1),
+    index: z.int().min(0),
+    elementId: ExtraBrick.shape.elementId.nullable(),
   }),
 ]);
 export type PlanOp = z.infer<typeof PlanOp>;

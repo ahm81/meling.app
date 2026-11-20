@@ -92,12 +92,21 @@ describe("bricks", () => {
     hidden: [],
     wholePages: [],
     extraBricks,
+    brickFixes: [],
   });
 
   it("sums a bag per element in the parts list's order and keeps unsure bricks apart", () => {
     const bag = brickBag(brickCatalog(pages, manuals)!, ["m2:1:0", "m1:1:0", "m1:1:1"]);
     expect(bag.lines).toEqual([{ elementId: "300", qty: 3, extra: 0 }, { elementId: "100", qty: 1, extra: 0 }]);
     expect(bag.unsure.map((c) => [c.elementId, c.qty, c.page, c.index])).toEqual([["300", 1, 1, 1]]);
+  });
+
+  it("lets an adult's answer replace an uncertain match", () => {
+    const catalog = brickCatalog(pages, manuals, [{ manualId: "m2", page: 1, index: 1, elementId: "200" }])!;
+    const bag = brickBag(catalog, ["m2:1:0"]);
+    expect(bag.lines).toEqual([{ elementId: "100", qty: 1, extra: 0 }, { elementId: "200", qty: 1, extra: 0 }]);
+    expect(bag.unsure).toEqual([]);
+    expect(bag.fixed.map((c) => [c.elementId, c.page, c.index, c.sure])).toEqual([["200", 1, 1, true]]);
   });
 
   it("adds the bricks placed by hand to their day's bag", () => {

@@ -13,6 +13,7 @@ export class InvalidOpError extends Error {
  * the source day may not become empty. hide: the id must be new. show: the id must exist.
  * wholePage: turning it on needs a page with steps that are all on one day; turning it off needs it to be on.
  * placeBrick: sets the count of a brick placed by hand in a day's bag; 0 removes it (it must then be there).
+ * fixBrick: sets which brick a parts box entry is; null takes the answer back (there must then be one).
  */
 export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
   const known = new Set(steps.map((s) => s.id));
@@ -20,6 +21,7 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
   let hidden = [...plan.hidden];
   let wholePages = plan.wholePages.map((w) => ({ ...w }));
   let extraBricks = plan.extraBricks.map((b) => ({ ...b }));
+  let brickFixes = plan.brickFixes.map((f) => ({ ...f }));
 
   for (const op of ops) {
     if (op.type === "moveStep") {
@@ -51,6 +53,12 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
       if (op.qty === 0 && !extraBricks.some(same)) throw new InvalidOpError(`Brikken ${op.elementId} er ikke lagt i pose ${op.day}.`);
       extraBricks = extraBricks.filter((b) => !same(b));
       if (op.qty > 0) extraBricks.push({ elementId: op.elementId, day: op.day, qty: op.qty });
+    } else if (op.type === "fixBrick") {
+      const same = (f: { manualId: string; page: number; index: number }) =>
+        f.manualId === op.manualId && f.page === op.page && f.index === op.index;
+      if (op.elementId === null && !brickFixes.some(same)) throw new InvalidOpError(`Brikken på side ${op.page} er ikke rettet.`);
+      brickFixes = brickFixes.filter((f) => !same(f));
+      if (op.elementId !== null) brickFixes.push({ manualId: op.manualId, page: op.page, index: op.index, elementId: op.elementId });
     } else {
       const same = (w: { manualId: string; page: number }) => w.manualId === op.manualId && w.page === op.page;
       const isOn = wholePages.some(same);
@@ -69,5 +77,5 @@ export function applyOps(plan: Plan, steps: Step[], ops: PlanOp[]): Plan {
       wholePages = [...wholePages, { manualId: op.manualId, page: op.page }];
     }
   }
-  return { days, hidden, wholePages, extraBricks };
+  return { days, hidden, wholePages, extraBricks, brickFixes };
 }

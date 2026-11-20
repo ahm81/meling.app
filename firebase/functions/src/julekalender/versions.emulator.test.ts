@@ -30,7 +30,7 @@ const db = getFirestore(app);
 const bucket = getStorage(app).bucket();
 afterAll(() => deleteApp(app));
 
-const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [], extraBricks: [] });
+const emptyPlan = (): Plan => ({ days: Array.from({ length: DOOR_COUNT }, () => ({ stepIds: [] })), hidden: [], wholePages: [], extraBricks: [], brickFixes: [] });
 
 async function seedCalendar(overrides: Partial<CalendarDoc> = {}): Promise<string> {
   const calId = `2026-${randomUUID()}`;
@@ -629,20 +629,26 @@ describe("callables", () => {
     });
   });
 
-  it("editPlan places a brick by hand and redraft keeps it", async () => {
+  it("editPlan places and corrects bricks by hand and redraft keeps both", async () => {
     const calId = await seedCalendar();
     await seedAnalyzedManual(calId, 12);
     await makeFirstDraft(db, fakeAi({}), calId);
     const { version } = await editPlanHandler(
       deps(),
-      as("amund", { calendarId: calId, baseVersion: 1, ops: [{ type: "placeBrick", elementId: "6135157", day: 3, qty: 2 }], summary: "La 2× 6135157 i pose 3" }),
+      as("amund", { calendarId: calId, baseVersion: 1, ops: [
+          { type: "placeBrick", elementId: "6135157", day: 3, qty: 2 },
+          { type: "fixBrick", manualId: "m1", page: 2, index: 0, elementId: "6100397" },
+        ],
+        summary: "La 2× 6135157 i pose 3",
+      }),
     );
     expect(version).toBe(2);
     const placed = [{ elementId: "6135157", day: 3, qty: 2 }];
-    expect(((await versions(calId))[1]!.data().plan as Plan).extraBricks).toEqual(placed);
+    const fixes = [{ manualId: "m1", page: 2, index: 0, elementId: "6100397" }];
+    expect((await versions(calId))[1]!.data().plan).toMatchObject({ extraBricks: placed, brickFixes: fixes });
 
     await redraftHandler(deps(), as("amund", { calendarId: calId, baseVersion: 2 }));
-    expect(((await versions(calId))[2]!.data().plan as Plan).extraBricks).toEqual(placed);
+    expect((await versions(calId))[2]!.data().plan).toMatchObject({ extraBricks: placed, brickFixes: fixes });
   });
 
   describe("readBricks", () => {

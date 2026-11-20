@@ -84,6 +84,9 @@ Versjoner er uforanderlige og skrives bare av functions; hver endring av fordeli
   `extraBricks` er brikker en voksen har lagt i en pose for hånd (`{ elementId, day, qty }`, høyst én per brikke og
   dag): brikker delelisten har, men som ingen brikkeboks viser, for eksempel figurdeler. De teller med i posen og i
   kontrollen mot delelisten, og beholdes når AI-en lager et nytt utkast. Feltet mangler i eldre versjoner (betyr `[]`).
+  `brickFixes` er de voksnes svar på hvilken brikke en usikker brikkeboks-linje egentlig er
+  (`{ manualId, page, index, elementId }`, der `index` er plassen i sidens `bricks.callouts`). Svaret erstatter det
+  automatiske treffet og gjør linjen sikker. Beholdes også ved nytt utkast, og feltet mangler i eldre versjoner.
 - `restoredFrom` er nummeret versjonen ble gjenopprettet fra, ellers `null`.
 
 Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette dem):
@@ -106,7 +109,7 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 
 | Funksjon         | Gjør                                                                                         |
 | ---------------- | -------------------------------------------------------------------------------------------- |
-| `editPlan`       | `{ calendarId, baseVersion, ops, summary }`: flytter trinn, skjuler/viser områder, slår hel side av/på eller legger en brikke i en pose for hånd (`placeBrick`, `qty` 0 tar den ut), og lager en ny versjon |
+| `editPlan`       | `{ calendarId, baseVersion, ops, summary }`: flytter trinn, skjuler/viser områder, slår hel side av/på legger en brikke i en pose for hånd (`placeBrick`, `qty` 0 tar den ut) eller retter et usikkert brikketreff (`fixBrick`, `elementId` `null` angrer), og lager en ny versjon |
 | `restoreVersion` | `{ calendarId, baseVersion, fromVersion }`: lager en ny versjon med planen til `fromVersion` og `restoredFrom` satt |
 | `redraft`        | `{ calendarId, baseVersion }`: AI-en lager et nytt utkast som blir en ny versjon (kan ta flere minutter). `baseVersion` er `null` når kalenderen ikke har noen versjon ennå (førsteutkastet feilet) |
 | `renderCutouts`  | `{ calendarId, version }`: lager utklippene til pakkelisten i Storage                        |
