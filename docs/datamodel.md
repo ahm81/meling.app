@@ -33,7 +33,7 @@ Julekalenderen for ett barn og ett år. Id er `{år}-{barnets uid}` (`calendarId
 
 | Sti                                      | Les    | Skriv fra klient                                                                 |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
-| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, id `{year}-{childUid}`, `year` heltall (minst 2024), `childUid` og `childName` string, gyldige `wishes`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` (samme form) og `childName` |
+| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, id `{year}-{childUid}`, `year` heltall (minst 2024), `childUid` og `childName` string, gyldige `wishes`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` (samme form), `childName`, `theme` (ett av temaene) og `doorImages` (nøkler `"1"`–`"24"`, verdier stier under kalenderens `doors/`) |
 | `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`, nøyaktig feltene i `ManualDoc` og id av `[A-Za-z0-9_-]` (Firestore auto-id). Oppdater: bare `order` (heltall, minst 1). Slett: aldri (bruk `deleteManual`) |
 | `julekalender/{calId}/pages/{manualId}_{side}` | voksne | aldri (bare functions)                                                     |
 | `julekalender/{calId}/versions/{nr}`     | voksne | aldri (bare functions). Id er versjonsnummeret med 6 sifre (`000001`)            |
@@ -89,6 +89,12 @@ Versjoner er uforanderlige og skrives bare av functions; hver endring av fordeli
   automatiske treffet og gjør linjen sikker. Beholdes også ved nytt utkast, og feltet mangler i eldre versjoner.
 - `restoredFrom` er nummeret versjonen ble gjenopprettet fra, ellers `null`.
 
+Utseende (velges av voksne, mangler i eldre kalendere):
+
+- `julekalender/{calId}.theme`: `"jul"` (standard), `"vinter"`, `"skog"` eller `"natt"`. Fargene ligger i web-appens CSS.
+- `julekalender/{calId}.doorImages`: kart fra lukenummer (`"1"`–`"24"`) til Storage-stien for bildet på luken. Luker
+  uten bilde mangler i kartet og får temaets farge.
+
 Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette dem):
 
 - `julekalender/{calId}.draftUpdatedAt` (timestamp): settes hver gang `draft` endres. Et utkast som har stått i
@@ -132,7 +138,9 @@ Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for 
   `julekalender/{calId}/bricks/callouts/{manualId}/{side}_{indeks}.webp` er bildet fra brikkeboksen for hver brikke,
   så en voksen kan kontrollere eller rette treffet (`indeks` er plassen i sidens `bricks.callouts`). `bricksDir` er `bricks/`, som tømmes og fylles på
   nytt hver gang brikkene leses.
-- `julekalender/{calId}/**` utenom manualene: voksne leser, ingen skriver fra klient (bare functions).
+- `julekalender/{calId}/doors/{luke}_{id}.jpg`: bildet på en luke. Voksne leser, laster opp (bare `image/jpeg` under
+  2 MB; web-appen skalerer ned til 640 px først) og sletter. `id` er ny for hver opplasting.
+- `julekalender/{calId}/**` utenom manualene og lukebildene: voksne leser, ingen skriver fra klient (bare functions).
 - Stiene bygges av `storagePaths` i `packages/shared`. Storage-regler kan ikke kalle `isAdult()`; de leser
   `members/{uid}.role` via `firestore.get(...)`.
 

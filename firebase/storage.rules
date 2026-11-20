@@ -13,13 +13,21 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/members/$(request.auth.uid)).data.role == 'adult';
     }
 
-    // Julekalender: only adults read; only adults upload PDF manuals. Everything else
+    // Julekalender: only adults read; only adults upload PDF manuals and door pictures. Everything else
     // (page images, cutouts) is written by functions (admin SDK).
     match /julekalender/{calId}/manuals/{file} {
       allow read: if isAdult();
       allow write: if isAdult()
         && request.resource.contentType == 'application/pdf'
         && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Door pictures: adults upload small JPEGs (the web app scales them down first) and may delete them.
+    match /julekalender/{calId}/doors/{file} {
+      allow read, delete: if isAdult();
+      allow create, update: if isAdult()
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size < 2 * 1024 * 1024;
     }
 
     match /julekalender/{calId}/{rest=**} {

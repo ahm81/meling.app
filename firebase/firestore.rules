@@ -36,6 +36,28 @@ service cloud.firestore {
           && w.text is string && w.text.size() <= 1000;
       }
 
+      // Theme and door pictures as in the shared Theme and DoorImages schemas. Both may be missing.
+      function validTheme(d) {
+        return !('theme' in d) || d.theme in ['jul', 'vinter', 'skog', 'natt'];
+      }
+      function validDoor(m, day) {
+        return !(day in m)
+          || (m[day] is string && m[day].matches('^julekalender/' + calId + '/doors/' + day + '_[A-Za-z0-9]+[.]jpg$'));
+      }
+      function validDoorImages(d) {
+        return !('doorImages' in d) || (d.doorImages is map
+          && d.doorImages.keys().hasOnly(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12',
+            '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24'])
+          && validDoor(d.doorImages, '1') && validDoor(d.doorImages, '2') && validDoor(d.doorImages, '3')
+          && validDoor(d.doorImages, '4') && validDoor(d.doorImages, '5') && validDoor(d.doorImages, '6')
+          && validDoor(d.doorImages, '7') && validDoor(d.doorImages, '8') && validDoor(d.doorImages, '9')
+          && validDoor(d.doorImages, '10') && validDoor(d.doorImages, '11') && validDoor(d.doorImages, '12')
+          && validDoor(d.doorImages, '13') && validDoor(d.doorImages, '14') && validDoor(d.doorImages, '15')
+          && validDoor(d.doorImages, '16') && validDoor(d.doorImages, '17') && validDoor(d.doorImages, '18')
+          && validDoor(d.doorImages, '19') && validDoor(d.doorImages, '20') && validDoor(d.doorImages, '21')
+          && validDoor(d.doorImages, '22') && validDoor(d.doorImages, '23') && validDoor(d.doorImages, '24'));
+      }
+
       allow read: if isAdult();
       allow create: if isAdult()
         && request.resource.data.keys().hasOnly(
@@ -52,8 +74,11 @@ service cloud.firestore {
         && request.resource.data.draft == 'waiting'
         && request.resource.data.draftError == null;
       allow update: if isAdult()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wishes', 'childName'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['wishes', 'childName', 'theme', 'doorImages'])
         && validWishes(request.resource.data.wishes)
+        && validTheme(request.resource.data)
+        && validDoorImages(request.resource.data)
         && request.resource.data.childName is string;
       allow delete: if false;
 
