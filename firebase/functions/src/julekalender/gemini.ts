@@ -37,7 +37,11 @@ export interface Ai {
   ): Promise<unknown>;
 }
 
-type GenerateResponse = { text?: string; candidates?: { finishReason?: string }[] };
+type ResponsePart = { text?: string; inlineData?: { mimeType?: string; data?: string } };
+export type GenerateResponse = {
+  text?: string;
+  candidates?: { finishReason?: string; content?: { parts?: ResponsePart[] } }[];
+};
 export type GenerateClient = { models: { generateContent(req: never): Promise<GenerateResponse> } };
 
 /** Turns a Gemini response into parsed JSON, or throws an error with context and the original cause. */
@@ -80,7 +84,7 @@ class GeminiCallError extends Error {
 }
 
 const clients = new Map<string, GenerateClient>();
-function clientFor(location: string): GenerateClient {
+export function clientFor(location: string): GenerateClient {
   let c = clients.get(location);
   if (!c) {
     // Vertex AI via Application Default Credentials; no key.
@@ -90,14 +94,30 @@ function clientFor(location: string): GenerateClient {
   return c;
 }
 
-export function vertexAi(client?: GenerateClient, retry: RetryOptions = {}): Ai {
+/** Runs `fn` up to `attempts` times, sleeping a jittered delay between tries while `retryable(error)` holds. */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  retryable: (e: unknown) => boolean,
+  opts: RetryOptions = {},
+): Promise<T> {
   const {
     attempts = 3,
     delaysMs = [2000, 6000],
     sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
     random = Math.random,
-  } = retry;
+  } = opts;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!retryable(e) || attempt >= attempts) throw e;
+      const base = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)] ?? 0;
+      await sleep(Math.round(base * (0.75 + random() * 0.5)));
+    }
+  }
+}
 
+export function vertexAi(client?: GenerateClient, retry: RetryOptions = {}): Ai {
   const once = async (contents: unknown, schema: z.ZodType, context: string) => {
     const { model, location } = geminiConfig();
     let res: GenerateResponse;
@@ -115,17 +135,14 @@ export function vertexAi(client?: GenerateClient, retry: RetryOptions = {}): Ai 
   };
 
   const generate = async (contents: unknown, schema: z.ZodType, context: string) => {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await once(contents, schema, context);
-      } catch (e) {
-        const retryable = !(e instanceof GeminiCallError) || e.retryable;
-        if (!retryable || attempt >= attempts) {
-          throw e instanceof GeminiCallError ? new Error(e.message, { cause: e.cause }) : e;
-        }
-        const base = delaysMs[Math.min(attempt - 1, delaysMs.length - 1)] ?? 0;
-        await sleep(Math.round(base * (0.75 + random() * 0.5)));
-      }
+    try {
+      return await withRetry(
+        () => once(contents, schema, context),
+        (e) => !(e instanceof GeminiCallError) || e.retryable,
+        retry,
+      );
+    } catch (e) {
+      throw e instanceof GeminiCallError ? new Error(e.message, { cause: e.cause }) : e;
     }
   };
   return {
