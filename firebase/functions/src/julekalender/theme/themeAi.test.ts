@@ -49,10 +49,25 @@ describe("vertexThemeAi", () => {
     expect(text).toContain("Ida");
   });
 
-  it("planTheme rejects a plan without 24 motifs", async () => {
-    const bad = { ...plan24, motifs: motifs.slice(0, 23) };
-    const { client } = scripted({ text: JSON.stringify(bad), candidates: [{ finishReason: "STOP" }] });
-    await expect(vertexThemeAi(client, noSleep).planTheme("jul", "Ida")).rejects.toThrow();
+  it("planTheme rejects a plan without 24 motifs, after three attempts", async () => {
+    const bad = { text: JSON.stringify({ ...plan24, motifs: motifs.slice(0, 23) }), candidates: [{ finishReason: "STOP" }] };
+    const { client, calls } = scripted(bad, bad, bad);
+    await expect(vertexThemeAi(client, noSleep).planTheme("jul", "Ida")).rejects.toThrow(/motifs/);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("planTheme retries an invalid plan and accepts the next one", async () => {
+    const bad = { text: JSON.stringify({ ...plan24, motifs: [] }), candidates: [{ finishReason: "STOP" }] };
+    const good = { text: JSON.stringify(plan24), candidates: [{ finishReason: "STOP" }] };
+    const { client, calls } = scripted(bad, good);
+    expect(await vertexThemeAi(client, noSleep).planTheme("jul", "Ida")).toEqual(plan24);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("planTheme does not retry a 400 call error", async () => {
+    const { client, calls } = scripted(Object.assign(new Error("HTTP 400"), { status: 400 }), { text: JSON.stringify(plan24) });
+    await expect(vertexThemeAi(client, noSleep).planTheme("jul", "Ida")).rejects.toThrow(/HTTP 400/);
+    expect(calls).toHaveLength(1);
   });
 
   it("doorImage sends the reference image and returns the image bytes", async () => {

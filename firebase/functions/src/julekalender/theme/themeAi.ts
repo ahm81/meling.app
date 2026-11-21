@@ -29,6 +29,13 @@ export type ThemePlan = z.infer<typeof ThemePlan>;
 /** The model gave no picture: a safety stop, another finish reason, or no image part. Not retried. */
 export class ImageRefusedError extends Error {}
 
+/** Marks a failed generateContent call (as opposed to a bad answer) so only retryable HTTP errors are retried. */
+class PlanCallError extends Error {
+  constructor(override readonly cause: unknown) {
+    super("Gemini tema: kallet feilet", { cause });
+  }
+}
+
 export interface ThemeAi {
   planTheme(prompt: string, childName: string): Promise<ThemePlan>;
   styleImage(style: string): Promise<Buffer>;
@@ -38,7 +45,7 @@ export interface ThemeAi {
 export const PLAN_PROMPT = `Du lager et tema for en julekalender med 24 luker til et barn. Svar med JSON etter skjemaet.
 - style: én kort stilbeskrivelse som skal gjelde for alle bildene (for eksempel materiale, former og farger). Ikke bruk varemerkenavn; skriv «byggeklosser og minifigurer», ikke «LEGO».
 - colors: fem farger som #rrggbb: bg (bakgrunn), door (lukene), done (åpnede luker), accent og text. Lukenummeret tegnes oppå luka med text-fargen, så både door og done må ha god kontrast mot text.
-- motifs: nøyaktig 24 ulike motiver som hører sammen, enkle nok for et femåring. Ikke bruk varemerkenavn.`;
+- motifs: nøyaktig 24 ulike motiver som hører sammen, enkle nok for en femåring. Ikke bruk varemerkenavn.`;
 
 export const IMAGE_RULES = `Bildet skal være kvadratisk, uten tekst, bokstaver eller tall, barnevennlig og ikke skummelt, med motivet midt i bildet og rolig bakgrunn.`;
 
@@ -52,16 +59,24 @@ export function vertexThemeAi(client?: GenerateClient, retry: RetryOptions = {})
   const plan = async (text: string): Promise<ThemePlan> =>
     withRetry(
       async () => {
-        const res = await c().models.generateContent({
-          model: geminiConfig().model,
-          contents: [{ role: "user", parts: [{ text }] }],
-          config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(ThemePlan) },
-        } as never);
+        let res: GenerateResponse;
+        try {
+          res = await c().models.generateContent({
+            model: geminiConfig().model,
+            contents: [{ role: "user", parts: [{ text }] }],
+            config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(ThemePlan) },
+          } as never);
+        } catch (e) {
+          throw new PlanCallError(e);
+        }
+        // Empty, truncated, malformed or invalid answers are usually transient: try again.
         return ThemePlan.parse(parseGeminiResponse(res, "tema"));
       },
-      () => true,
+      (e) => !(e instanceof PlanCallError) || isRetryable(e.cause),
       retry,
-    );
+    ).catch((e: unknown) => {
+      throw e instanceof PlanCallError ? e.cause : e;
+    });
 
   const image = async (parts: unknown[], context: string): Promise<Buffer> =>
     withRetry(
