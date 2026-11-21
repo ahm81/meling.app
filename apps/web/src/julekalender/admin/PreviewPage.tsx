@@ -85,7 +85,7 @@ export function PreviewPage() {
       {manualsChanged && (
         <p role="alert">Manualene er endret siden fordelingen ble laget. Lag et nytt utkast for å se bildene.</p>
       )}
-      <ChildFrame theme={calendar.theme}>
+      <ChildFrame theme={calendar.theme} colors={calendar.customTheme?.colors}>
         {door === null ? (
           <>
             <h2 className="child-title">God jul, {calendar.childName}!</h2>

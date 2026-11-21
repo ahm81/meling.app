@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
-import { THEMES, type Theme, paths, storagePaths } from "@meling/shared";
+import { FIXED_THEMES, type Theme, paths, storagePaths } from "@meling/shared";
 import { db, storage } from "../../firebase";
-import { ChildFrame, DAYS, THEME_LABELS, doorFace } from "./Doors";
+import { AiThemeCard } from "./AiThemeCard";
+import { ChildFrame, DAYS, THEME_LABELS, doorFace, themeVars } from "./Doors";
 import { useCalendar } from "./useCalendar";
 import { useDownloadUrls } from "./useCutouts";
 
@@ -132,7 +133,7 @@ export function AppearancePage() {
         <h2>Tema</h2>
         <p className="muted">Fargene {calendar.childName} får på kalenderen sin.</p>
         <div className="theme-choices" role="radiogroup" aria-label="Tema">
-          {THEMES.map((theme) => (
+          {FIXED_THEMES.map((theme) => (
             <label key={theme} className={`theme-choice${calendar.theme === theme ? " chosen" : ""}`}>
               <input
                 type="radio"
@@ -150,8 +151,33 @@ export function AppearancePage() {
               <span>{THEME_LABELS[theme]}</span>
             </label>
           ))}
+          {calendar.customTheme && (
+            <label className={`theme-choice${calendar.theme === "egen" ? " chosen" : ""}`}>
+              <input
+                type="radio"
+                name="theme"
+                checked={calendar.theme === "egen"}
+                onChange={() => void setTheme("egen")}
+              />
+              <span
+                className="child-frame theme-swatch"
+                data-theme="egen"
+                style={themeVars(calendar.customTheme.colors)}
+                aria-hidden="true"
+              >
+                {[1, 2, 3].map((d) => (
+                  <span key={d} className="door">
+                    <span className="door-number">{d}</span>
+                  </span>
+                ))}
+              </span>
+              <span>{THEME_LABELS.egen}</span>
+            </label>
+          )}
         </div>
       </div>
+
+      <AiThemeCard calId={calId} calendar={calendar} />
 
       <div className="card">
         <h2>Bilder på lukene</h2>
@@ -183,7 +209,7 @@ export function AppearancePage() {
         </div>
         {failure && <p role="alert">{failure}</p>}
         {message && <p role="status">{message}</p>}
-        <ChildFrame theme={calendar.theme}>
+        <ChildFrame theme={calendar.theme} colors={calendar.customTheme?.colors}>
           <div className="doors">
             {DAYS.map((day) => {
               const path = images[day];

@@ -10,6 +10,8 @@ lib/
 
 # Firebase
 firebase/functions/.try-analysis/
+firebase/functions/.try-theme/
+firebase/functions/.try-theme-build/
 # Manual PDFs are LEGO's content; never commit them.
 *.pdf
 .firebase/

@@ -30,7 +30,7 @@ export type CallableDeps = PipelineDeps;
 export type CallRequest = { auth?: { uid: string } | null; data: unknown };
 
 /** A draft or manual that has not moved for this long is considered stuck and may be redone. */
-const STALE_MS = 15 * 60_000;
+export const STALE_MS = 15 * 60_000;
 const MAX_CONCURRENT_PAGES = 6;
 
 /** The caller's uid, if they are an adult member (members/{uid}.role == "adult"). */
@@ -46,7 +46,7 @@ export async function requireAdult(db: Firestore, request: CallRequest): Promise
 
 // Ids become document and Storage paths: Firestore auto-ids, and calendar ids `${year}-${uid}`.
 // No "/" (another document) and no ":" (step ids are `${manualId}:${page}:${index}`).
-const Id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
+export const Id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/);
 
 function parseInput<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);

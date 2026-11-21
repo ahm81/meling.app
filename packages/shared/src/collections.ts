@@ -34,9 +34,21 @@ export const storagePaths = {
   // (and URL) instead of being served from a cache.
   doorImage: (calId: string, day: number, id: string) =>
     `${Collections.julekalender}/${calId}/doors/${day}_${id}.jpg`,
+  // A door picture made by AI when an adult accepts a theme draft. `id` is new for every acceptance.
+  aiDoorImage: (calId: string, day: number, id: string) =>
+    `${Collections.julekalender}/${calId}/doors/${day}_ai${id}.jpg`,
+  // Pictures of a theme draft, written by functions only. `id` is new for every draft.
+  themeDraftStyle: (calId: string, id: string) =>
+    `${Collections.julekalender}/${calId}/themeDraft/style_${id}.png`,
+  themeDraftDoor: (calId: string, day: number, id: string) =>
+    `${Collections.julekalender}/${calId}/themeDraft/${day}_${id}.jpg`,
+  themeDraftDir: (calId: string) => `${Collections.julekalender}/${calId}/themeDraft/`,
   // Folder prefixes (with trailing slash) for deleting a manual's derived files.
   pagesDir: (calId: string, manualId: string) =>
     `${Collections.julekalender}/${calId}/pages/${manualId}/`,
   cutoutsDir: (calId: string) => `${Collections.julekalender}/${calId}/cutouts/`,
   bricksDir: (calId: string) => `${Collections.julekalender}/${calId}/bricks/`,
 };
+
+/** True for a door picture made by AI (see `storagePaths.aiDoorImage`), false for one an adult uploaded. */
+export const isAiDoorImage = (path: string): boolean => /\/doors\/\d{1,2}_ai[A-Za-z0-9]+\.jpg$/.test(path);

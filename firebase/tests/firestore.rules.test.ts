@@ -224,6 +224,39 @@ describe("julekalender", () => {
     await assertFails(updateDoc(ref, { doorImages: { "1": "julekalender/2026-ida/manuals/m1.pdf" } }));
   });
 
+  const customTheme = {
+    prompt: "LEGO-jul",
+    colors: { bg: "#a3262a", door: "#a3262a", done: "#a3262a", accent: "#a3262a", text: "#a3262a" },
+  };
+
+  it("adults may choose the custom theme when it exists", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), paths.calendar("2026-ida")), { customTheme });
+    });
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertSucceeds(updateDoc(ref, { theme: "egen" }));
+  });
+
+  it("denies the custom theme without customTheme", async () => {
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertFails(updateDoc(ref, { theme: "egen" }));
+  });
+
+  it("clients cannot write customTheme or themeDraft", async () => {
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertFails(updateDoc(ref, { customTheme }));
+    await assertFails(
+      updateDoc(ref, {
+        themeDraft: { status: "running", error: null, prompt: "x", generationId: "gen1", colors: null, style: null, motifs: [], styleImage: null, doors: {} },
+      }),
+    );
+  });
+
+  it("adults may put an AI door picture path on a door", async () => {
+    const ref = doc(env.authenticatedContext("amund").firestore(), paths.calendar("2026-ida"));
+    await assertSucceeds(updateDoc(ref, { "doorImages.4": storagePaths.aiDoorImage("2026-ida", 4, "z9") }));
+  });
+
   it("children cannot change the theme", async () => {
     const db = env.authenticatedContext("ida").firestore();
     await assertFails(updateDoc(doc(db, paths.calendar("2026-ida")), { theme: "natt" }));

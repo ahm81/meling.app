@@ -46,3 +46,23 @@ export const readBricks = httpsCallable<{ calendarId: string }, { elements: numb
   "readBricks",
   long,
 );
+
+// Fire-and-forget: the call only starts a job on a Cloud Tasks queue and returns at once; the job runs on even if the
+// tab is closed. Progress arrives through the calendar snapshot (`themeDraft`), so a client timeout
+// (`functions/deadline-exceeded`) is harmless.
+export const generateTheme = httpsCallable<{ calendarId: string; prompt: string }, { ok: true }>(
+  functions,
+  "generateTheme",
+  standard,
+);
+
+export const regenerateDoor = httpsCallable<{ calendarId: string; day: number }, { ok: true }>(
+  functions,
+  "regenerateDoor",
+  standard,
+);
+
+export const applyThemeDraft = httpsCallable<
+  { calendarId: string; keepUploaded: boolean },
+  { replaced: number; kept: number }
+>(functions, "applyThemeDraft", standard);

@@ -37,8 +37,12 @@ service cloud.firestore {
       }
 
       // Theme and door pictures as in the shared Theme and DoorImages schemas. Both may be missing.
+      // "egen" needs the calendar to have a customTheme. Clients can never write customTheme or themeDraft:
+      // the update rule's affectedKeys().hasOnly([...]) below does not list them, so only functions set them.
       function validTheme(d) {
-        return !('theme' in d) || d.theme in ['jul', 'vinter', 'skog', 'natt'];
+        return !('theme' in d)
+          || d.theme in ['jul', 'vinter', 'skog', 'natt']
+          || (d.theme == 'egen' && 'customTheme' in d);
       }
       function validDoor(m, day) {
         return !(day in m)
