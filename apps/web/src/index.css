@@ -1382,3 +1382,13 @@ label.door:has(input:focus-visible) {
   max-width: 100%;
   min-width: 0;
 }
+
+.card > textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.card .doors .door-edit > [role="alert"] {
+  font-size: 0.75rem;
+  color: var(--c-text);
+}
