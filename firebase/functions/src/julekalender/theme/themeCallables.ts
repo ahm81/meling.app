@@ -101,6 +101,7 @@ export async function regenerateDoorHandler(deps: ThemeDeps, request: CallReques
     if (!draft.generationId || !draft.style || !draft.styleImage || !draft.motifs?.length) {
       throw new HttpsError("failed-precondition", "Planen for temaet er ikke ferdig ennå.");
     }
+    if (draft.status === "error") throw new HttpsError("failed-precondition", "Temaet feilet. Lag det på nytt.");
     if (draft.status === "running") throw new HttpsError("failed-precondition", ALREADY_RUNNING);
     if (draft.doors?.[String(day)]?.status === "pending" && isFresh(draft)) {
       throw new HttpsError("failed-precondition", "Dette bildet lages allerede. Prøv igjen om litt.");

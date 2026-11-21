@@ -104,7 +104,7 @@ Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette 
 - `julekalender/{calId}.themeDraft`: et tema som lages eller er laget men ikke godtatt:
   `{ status ("running" | "done" | "error"), error, updatedAt (timestamp), prompt, colors (eller null), style (stilbeskrivelse eller null), generationId (tilfeldig id for utkastet, så gamle jobber ikke skriver i et nytt), motifs
   (liste med tekst), styleImage (Storage-sti eller null), doors }`. `doors` er et kart fra lukenummer
-  (`"1"`–`"24"`) til `{ status ("pending" | "done" | "error"), path (Storage-sti eller null), error }`.
+  (`"1"`–`"24"`) til `{ status ("pending" | "done" | "error"), path (Storage-sti eller null), error }`. `error` kan også stå sammen med `done`: en mislykket «Ny variant» beholder det gamle bildet og noterer feilen.
 
 - `julekalender/{calId}.draftUpdatedAt` (timestamp): settes hver gang `draft` endres. Et utkast som har stått i
   `running` i mer enn 15 minutter, kan lages på nytt med `redraft`.

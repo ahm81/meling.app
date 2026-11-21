@@ -7,10 +7,15 @@ import { useDownloadUrls } from "./useCutouts";
 
 const MAX_PROMPT = 500;
 
-/** The message of a failed callable. A client timeout is no failure: the work goes on and the snapshot shows it. */
-function callError(e: unknown, fallback: string): string | null {
+/**
+ * The message of a failed callable. For fire-and-forget calls (`background`) a client timeout is no failure: the work
+ * goes on and the snapshot shows it. For the others it is reported.
+ */
+function callError(e: unknown, fallback: string, background: boolean): string | null {
   const code = (e as { code?: string }).code;
-  if (code === "functions/deadline-exceeded") return null;
+  if (code === "functions/deadline-exceeded") {
+    return background ? null : "Det tok for lang tid. Sjekk om temaet er tatt i bruk, og prøv igjen.";
+  }
   console.error(e);
   return (e as { message?: string }).message || fallback;
 }
@@ -46,7 +51,7 @@ export function AiThemeCard({ calId, calendar }: { calId: string; calendar: Cale
     try {
       await generateTheme({ calendarId: calId, prompt: prompt.trim() });
     } catch (e) {
-      setFailure(callError(e, "Kunne ikke lage temaet. Prøv igjen."));
+      setFailure(callError(e, "Kunne ikke lage temaet. Prøv igjen.", true));
     } finally {
       setStarting(false);
     }
@@ -59,7 +64,7 @@ export function AiThemeCard({ calId, calendar }: { calId: string; calendar: Cale
     try {
       await regenerateDoor({ calendarId: calId, day });
     } catch (e) {
-      setFailure(callError(e, "Kunne ikke lage en ny variant. Prøv igjen."));
+      setFailure(callError(e, "Kunne ikke lage en ny variant. Prøv igjen.", true));
     } finally {
       setRegenerating((s) => new Set([...s].filter((d) => d !== day)));
     }
@@ -85,7 +90,7 @@ export function AiThemeCard({ calId, calendar }: { calId: string; calendar: Cale
       await applyThemeDraft({ calendarId: calId, keepUploaded });
       setMessage("Temaet er tatt i bruk.");
     } catch (e) {
-      setFailure(callError(e, "Kunne ikke ta i bruk temaet. Prøv igjen."));
+      setFailure(callError(e, "Kunne ikke ta i bruk temaet. Prøv igjen.", false));
     } finally {
       setApplying(false);
     }
@@ -140,10 +145,10 @@ export function AiThemeCard({ calId, calendar }: { calId: string; calendar: Cale
                       <span className="door-number">{day}</span>
                       {pending && <span className="door-done">Lager …</span>}
                     </div>
-                    {door?.status === "error" && !pending && <span role="alert">{door.error}</span>}
+                    {door?.error && !pending && <span role="alert">{door.error}</span>}
                     <button
                       className="door-remove"
-                      disabled={running || pending}
+                      disabled={running || pending || draft.status !== "done"}
                       onClick={() => void variant(day)}
                       aria-label={`Ny variant av luke ${day}`}
                     >

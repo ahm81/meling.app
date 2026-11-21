@@ -123,6 +123,20 @@ describe("theme job", () => {
     expect(after.doors["6"]).toEqual(before.doors["6"]);
   });
 
+  it("regenerateDraftDoor keeps the old picture when the new variant fails", async () => {
+    const calId = await seedCalendar();
+    await runThemeGeneration(depsWith(fakeThemeAi()), calId, await gid(calId), "Dinosaurer", "Ida");
+    const before = await readDraft(calId);
+    const motif = before.motifs[4]!;
+    await db.doc(paths.calendar(calId)).update({ "themeDraft.doors.5.status": "pending" });
+    await regenerateDraftDoor(depsWith(fakeThemeAi({ refuse: new Set([motif]) })), calId, await gid(calId), 5);
+    const after = await readDraft(calId);
+    expect(after.doors["5"]!.status).toBe("done");
+    expect(after.doors["5"]!.path).toBe(before.doors["5"]!.path);
+    expect(after.doors["5"]!.error).toBeTruthy();
+    expect(await exists(after.doors["5"]!.path!)).toBe(true);
+  });
+
   it("never touches theme, customTheme or doorImages", async () => {
     const calId = await seedCalendar();
     const read = async () => {

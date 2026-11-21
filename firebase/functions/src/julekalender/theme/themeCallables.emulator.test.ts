@@ -139,6 +139,13 @@ describe("regenerateDoor", () => {
     await expect(regenerateDoorHandler(deps(), as("amund", { calendarId: calId, day: 3 }))).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
+  it("rejects a draft with status error", async () => {
+    const calId = await seedCalendar();
+    await seedDraft(calId);
+    await db.doc(paths.calendar(calId)).update({ "themeDraft.status": "error" });
+    await expect(regenerateDoorHandler(deps(), as("amund", { calendarId: calId, day: 3 }))).rejects.toMatchObject({ code: "failed-precondition", message: "Temaet feilet. Lag det på nytt." });
+  });
+
   it("makes a new picture for one door", async () => {
     const calId = await seedCalendar();
     const old = await seedDraft(calId);

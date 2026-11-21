@@ -159,10 +159,10 @@ export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, genera
     return;
   }
   const job: Job = { calId, generationId, stale: false };
+  const oldPath = draft.doors[String(day)]?.path ?? null;
   try {
     const motif = draft.motifs[day - 1];
     if (!draft.styleImage || !draft.style || !motif) throw new Error("Utkastet mangler stil, stilbilde eller motiv");
-    const oldPath = draft.doors[String(day)]?.path ?? null;
     const [reference] = await bucket.file(draft.styleImage).download();
     const jpeg = await toDoorJpeg(await themeAi.doorImage(draft.style, motif, reference));
     const path = storagePaths.themeDraftDoor(calId, day, newId());
@@ -174,6 +174,7 @@ export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, genera
     if (oldPath) await bucket.file(oldPath).delete({ ignoreNotFound: true }).catch((e) => logger.error("Tema: kunne ikke slette gammelt bilde", { calId, day, error: String(e) }));
   } catch (e) {
     logger.error("Tema: ny variant feilet", { calId, day, error: e instanceof Error ? e.message : String(e) });
-    await writeDraft(db, job, { [key]: { status: "error", path: null, error: doorError(e) } });
+    // A good picture is kept: the door stays done with the error as a note. Only a door without a picture becomes error.
+    await writeDraft(db, job, { [key]: oldPath ? { status: "done", path: oldPath, error: doorError(e) } : { status: "error", path: null, error: doorError(e) } });
   }
 }

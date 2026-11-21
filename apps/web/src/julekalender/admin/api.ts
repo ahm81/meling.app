@@ -5,6 +5,8 @@ import { functions } from "../../firebase";
 const standard = { timeout: 120_000 };
 // Long-running: callers must follow progress through Firestore snapshots (useCalendar), not the reply.
 const long = { timeout: 540_000 };
+// generateTheme runs up to the callable's 1800 s timeout, so the client must not give up earlier.
+const generateThemeTimeout = { timeout: 1_800_000 };
 
 export const editPlan = httpsCallable<
   { calendarId: string; baseVersion: number; ops: PlanOp[]; summary: string },
@@ -52,7 +54,7 @@ export const readBricks = httpsCallable<{ calendarId: string }, { elements: numb
 export const generateTheme = httpsCallable<{ calendarId: string; prompt: string }, { ok: true }>(
   functions,
   "generateTheme",
-  long,
+  generateThemeTimeout,
 );
 
 export const regenerateDoor = httpsCallable<{ calendarId: string; day: number }, { ok: true }>(
