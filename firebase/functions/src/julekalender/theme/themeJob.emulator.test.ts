@@ -89,13 +89,18 @@ describe("theme job", () => {
 
   it("regenerateDraftDoor replaces one door", async () => {
     const calId = await seedCalendar();
-    const deps = depsWith(fakeThemeAi());
+    const fake = fakeThemeAi();
+    const styles: string[] = [];
+    const deps = depsWith({ ...fake, doorImage: (style, motif, ref) => (styles.push(style), fake.doorImage(style, motif, ref)) });
     await runThemeGeneration(deps, calId, "Dinosaurer", "Ida");
+    styles.length = 0;
     const before = await readDraft(calId);
     // The caller only flips the status, so the old path stays until the new picture is written.
     await db.doc(paths.calendar(calId)).update({ "themeDraft.doors.5.status": "pending" });
     await regenerateDraftDoor(deps, calId, 5);
     const after = await readDraft(calId);
+    expect(after.style).toBe("enkle, runde former i julefarger");
+    expect(styles).toEqual([after.style]);
     expect(after.doors["5"]!.status).toBe("done");
     expect(after.doors["5"]!.path).not.toBe(before.doors["5"]!.path);
     expect(await exists(after.doors["5"]!.path!)).toBe(true);

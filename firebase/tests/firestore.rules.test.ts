@@ -247,7 +247,7 @@ describe("julekalender", () => {
     await assertFails(updateDoc(ref, { customTheme }));
     await assertFails(
       updateDoc(ref, {
-        themeDraft: { status: "running", error: null, prompt: "x", colors: null, motifs: [], styleImage: null, doors: {} },
+        themeDraft: { status: "running", error: null, prompt: "x", colors: null, style: null, motifs: [], styleImage: null, doors: {} },
       }),
     );
   });

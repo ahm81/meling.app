@@ -83,7 +83,7 @@ export async function runThemeGeneration(deps: ThemeDeps, calId: string, prompt:
     const doors = Object.fromEntries(
       Array.from({ length: DOOR_COUNT }, (_, i) => [String(i + 1), { status: "pending", path: null, error: null }]),
     );
-    await writeDraft(db, calId, { "themeDraft.colors": plan.colors, "themeDraft.motifs": plan.motifs, "themeDraft.doors": doors });
+    await writeDraft(db, calId, { "themeDraft.colors": plan.colors, "themeDraft.style": plan.style, "themeDraft.motifs": plan.motifs, "themeDraft.doors": doors });
 
     let reference: Buffer;
     try {
@@ -116,10 +116,10 @@ export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, day: n
   try {
     const draft = (await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined;
     const motif = draft?.motifs[day - 1];
-    if (!draft?.styleImage || !motif) throw new Error("Utkastet mangler stilbilde eller motiv");
+    if (!draft?.styleImage || !draft.style || !motif) throw new Error("Utkastet mangler stil, stilbilde eller motiv");
     oldPath = draft.doors[String(day)]?.path ?? null;
     const [reference] = await bucket.file(draft.styleImage).download();
-    const jpeg = await toDoorJpeg(await themeAi.doorImage(draft.prompt, motif, reference));
+    const jpeg = await toDoorJpeg(await themeAi.doorImage(draft.style, motif, reference));
     const path = storagePaths.themeDraftDoor(calId, day, newId());
     await bucket.file(path).save(jpeg, { contentType: "image/jpeg" });
     await writeDraft(db, calId, { [key]: { status: "done", path, error: null } });

@@ -102,7 +102,7 @@ Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette 
 - `julekalender/{calId}.customTheme`: det AI-lagde temaet en voksen har godtatt: `{ prompt, colors }`. `prompt` er
   ønsket (1–500 tegn), `colors` er fem farger `{ bg, door, done, accent, text }`, hver som `#rrggbb`.
 - `julekalender/{calId}.themeDraft`: et tema som lages eller er laget men ikke godtatt:
-  `{ status ("running" | "done" | "error"), error, updatedAt (timestamp), prompt, colors (eller null), motifs
+  `{ status ("running" | "done" | "error"), error, updatedAt (timestamp), prompt, colors (eller null), style (stilbeskrivelse eller null), motifs
   (liste med tekst), styleImage (Storage-sti eller null), doors }`. `doors` er et kart fra lukenummer
   (`"1"`–`"24"`) til `{ status ("pending" | "done" | "error"), path (Storage-sti eller null), error }`.
 
