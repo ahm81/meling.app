@@ -1,3 +1,9 @@
+// Cost per theme (checked 2026-11-21 on https://cloud.google.com/vertex-ai/generative-ai/pricing,
+// Gemini 3.1 Flash Image, global endpoint, standard pay-as-you-go):
+//   image output $60 per 1M tokens; a 1K (about 1 MP) picture is 1120 tokens, about $0.067 each.
+//   image input $0.50 per 1M tokens; the reference picture is 1120 tokens, under $0.001 per call.
+//   25 pictures (1 style + 24 doors) is about $1.70. The planning call (text) is a fraction of a cent.
+// Re-generating a single door costs one picture. Prices change: check the page again before relying on this.
 import { ThemeColors } from "@meling/shared";
 import sharp from "sharp";
 import { z } from "zod";

@@ -41,13 +41,15 @@ pnpm typecheck && pnpm test
 pnpm test:rules           # Firestore-regeltester mot emulatoren
 pnpm test:functions       # functions-tester mot emulatoren (prosjekt demo-meling)
 pnpm --filter @meling/functions check:load   # functions må la seg laste med require (også i CI)
+pnpm --filter @meling/functions try-theme "<ønske>" [barnets navn] [antall=4]   # ekte Vertex, koster penger; bilder i .try-theme/
 pnpm add-member --email <e-post> --name <navn> --role adult|child [--emulator]
 cd apps/apple && xcodegen generate && open Meling.xcodeproj
 cd apps/apple/Packages/MelingKit && swift test
 ```
 
-Julekalenderens Gemini-kall bruker modellen `GEMINI_MODEL` (standard `gemini-3.8-flash`) og Vertex-lokasjonen
-`GEMINI_LOCATION` (standard `global`). Begge leses fra miljøet ved hvert kall og er ikke hemmeligheter: sett dem i
+Julekalenderens Gemini-kall bruker modellen `GEMINI_MODEL` (standard `gemini-3.8-flash`), bildemodellen for AI-temaet
+`GEMINI_IMAGE_MODEL` (standard `gemini-3.1-flash-image`) og Vertex-lokasjonen
+`GEMINI_LOCATION` (standard `global`). Alle leses fra miljøet ved hvert kall og er ikke hemmeligheter: sett dem i
 skallet for `try-analysis`, eller i `firebase/functions/.env.meling-app` (kan committes) for deploy.
 `MELING_FAKE_AI=1` i `firebase/functions/.env.local` gir falsk AI i emulatoren.
 
@@ -67,6 +69,8 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
   den slår på API-ene for Functions 2. gen, Eventarc, Pub/Sub, regler og Vertex AI og gir tjenesteagentene rollene
   Firestore-triggere og `firestore.get` i `storage.rules` trenger. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
+- En prosjekteier setter opp et budsjettvarsel i Cloud Billing for `meling-app` (Billing → Budgets & alerts) før AI-temaet
+  tas i bruk. Beløp og mottaker committes ikke.
 - Alle actions er låst til commit-SHA. Dependabot (`.github/dependabot.yml`) oppdaterer dem.
 - Web-konfigurasjonen for produksjon ligger i `apps/web/.env.production`, men API-nøkkelen committes aldri. CI setter
   `VITE_FIREBASE_API_KEY` fra repo-variabelen `FIREBASE_WEB_API_KEY`. Nøkkelen er begrenset til våre domener og til
