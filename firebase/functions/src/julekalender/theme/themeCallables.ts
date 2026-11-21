@@ -179,7 +179,8 @@ export async function applyThemeDraftHandler({ db, bucket }: ThemeDeps, request:
 
 const deps = (): ThemeDeps => ({ db: getFirestore(), bucket: getStorage().bucket(), themeAi: themeAiFromEnv() });
 
-// The pictures are made in the call, so the budget is the same as for the longest manual pipeline.
-export const generateTheme = onCall({ timeoutSeconds: 540, memory: "1GiB" }, (request) => generateThemeHandler(deps(), request));
+// The pictures are made in the call. With 429 backoff (up to ~110 s per image) 24 doors can take far longer than 540 s,
+// so generateTheme gets 1800 s; regenerateDoor makes a single picture and fits in 540 s.
+export const generateTheme = onCall({ timeoutSeconds: 1800, memory: "1GiB" }, (request) => generateThemeHandler(deps(), request));
 export const regenerateDoor = onCall({ timeoutSeconds: 540, memory: "1GiB" }, (request) => regenerateDoorHandler(deps(), request));
 export const applyThemeDraft = onCall({ timeoutSeconds: 120 }, (request) => applyThemeDraftHandler(deps(), request));
