@@ -33,7 +33,7 @@ Julekalenderen for ett barn og ett år. Id er `{år}-{barnets uid}` (`calendarId
 
 | Sti                                      | Les    | Skriv fra klient                                                                 |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------------------- |
-| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, id `{year}-{childUid}`, `year` heltall (minst 2024), `childUid` og `childName` string, gyldige `wishes`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` (samme form), `childName`, `theme` (ett av temaene) og `doorImages` (nøkler `"1"`–`"24"`, verdier stier under kalenderens `doors/`) |
+| `julekalender/{calId}`                   | voksne | opprett: nøyaktig feltene i `CalendarDoc`, id `{year}-{childUid}`, `year` heltall (minst 2024), `childUid` og `childName` string, gyldige `wishes`, `createdBy == uid`, `currentVersion == null`, `draft == "waiting"`, `draftError == null`. Oppdater: bare `wishes` (samme form), `childName`, `theme` (ett av temaene; `"egen"` bare når `customTheme` finnes) og `doorImages` (nøkler `"1"`–`"24"`, verdier stier under kalenderens `doors/`) |
 | `julekalender/{calId}/manuals/{id}`      | voksne | opprett med `status == "uploaded"`, nøyaktig feltene i `ManualDoc` og id av `[A-Za-z0-9_-]` (Firestore auto-id). Oppdater: bare `order` (heltall, minst 1). Slett: aldri (bruk `deleteManual`) |
 | `julekalender/{calId}/pages/{manualId}_{side}` | voksne | aldri (bare functions)                                                     |
 | `julekalender/{calId}/versions/{nr}`     | voksne | aldri (bare functions). Id er versjonsnummeret med 6 sifre (`000001`)            |
@@ -91,11 +91,20 @@ Versjoner er uforanderlige og skrives bare av functions; hver endring av fordeli
 
 Utseende (velges av voksne, mangler i eldre kalendere):
 
-- `julekalender/{calId}.theme`: `"jul"` (standard), `"vinter"`, `"skog"` eller `"natt"`. Fargene ligger i web-appens CSS.
+- `julekalender/{calId}.theme`: `"jul"` (standard), `"vinter"`, `"skog"`, `"natt"` eller `"egen"`. Fargene til de faste
+  temaene ligger i web-appens CSS. `"egen"` tar fargene fra `customTheme.colors`, og reglene tillater den bare når
+  kalenderen har `customTheme`.
 - `julekalender/{calId}.doorImages`: kart fra lukenummer (`"1"`–`"24"`) til Storage-stien for bildet på luken. Luker
   uten bilde mangler i kartet og får temaets farge.
 
 Felt som bare functions skriver (valgfrie i skjemaene, klienter kan aldri sette dem):
+
+- `julekalender/{calId}.customTheme`: det AI-lagde temaet en voksen har godtatt: `{ prompt, colors }`. `prompt` er
+  ønsket (1–500 tegn), `colors` er fem farger `{ bg, door, done, accent, text }`, hver som `#rrggbb`.
+- `julekalender/{calId}.themeDraft`: et tema som lages eller er laget men ikke godtatt:
+  `{ status ("running" | "done" | "error"), error, updatedAt (timestamp), prompt, colors (eller null), motifs
+  (liste med tekst), styleImage (Storage-sti eller null), doors }`. `doors` er et kart fra lukenummer
+  (`"1"`–`"24"`) til `{ status ("pending" | "done" | "error"), path (Storage-sti eller null), error }`.
 
 - `julekalender/{calId}.draftUpdatedAt` (timestamp): settes hver gang `draft` endres. Et utkast som har stått i
   `running` i mer enn 15 minutter, kan lages på nytt med `redraft`.
@@ -140,6 +149,9 @@ Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for 
   nytt hver gang brikkene leses.
 - `julekalender/{calId}/doors/{luke}_{id}.jpg`: bildet på en luke. Voksne leser, laster opp (bare `image/jpeg` under
   2 MB; web-appen skalerer ned til 640 px først) og sletter. `id` er ny for hver opplasting.
+  AI-lagde lukebilder heter `{luke}_ai{id}.jpg` (`aiDoorImage`); `isAiDoorImage` skiller dem fra opplastede.
+- `julekalender/{calId}/themeDraft/`: bildene til et temautkast (`style_{id}.png`, `{luke}_{id}.jpg`). Voksne leser,
+  bare functions skriver. Mappen tømmes av functions (`themeDraftDir`).
 - `julekalender/{calId}/**` utenom manualene og lukebildene: voksne leser, ingen skriver fra klient (bare functions).
 - Stiene bygges av `storagePaths` i `packages/shared`. Storage-regler kan ikke kalle `isAdult()`; de leser
   `members/{uid}.role` via `firestore.get(...)`.

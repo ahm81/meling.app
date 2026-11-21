@@ -153,13 +153,48 @@ export const Wishes = z.object({
 });
 export type Wishes = z.infer<typeof Wishes>;
 
-// The look of the child's calendar. The colours live in the web app's CSS (`.child-frame[data-theme]`).
-export const THEMES = ["jul", "vinter", "skog", "natt"] as const;
+// The look of the child's calendar. The colours of the fixed themes live in the web app's CSS
+// (`.child-frame[data-theme]`); "egen" takes them from `customTheme.colors`.
+export const THEMES = ["jul", "vinter", "skog", "natt", "egen"] as const;
+export const FIXED_THEMES = ["jul", "vinter", "skog", "natt"] as const;
 export const Theme = z.enum(THEMES);
 export type Theme = z.infer<typeof Theme>;
 
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+export const ThemeColors = z.object({ bg: hexColor, door: hexColor, done: hexColor, accent: hexColor, text: hexColor });
+export type ThemeColors = z.infer<typeof ThemeColors>;
+
+// The AI-made theme an adult has accepted: the wish and the colours made from it.
+export const CustomTheme = z.object({ prompt: z.string().min(1).max(500), colors: ThemeColors });
+export type CustomTheme = z.infer<typeof CustomTheme>;
+
+// Door number ("1".."24").
+const DoorKey = z.string().regex(/^([1-9]|1\d|2[0-4])$/);
+
+// One door picture in a theme draft. `path` is a Storage path under `themeDraft/` once the picture is done.
+export const DraftDoor = z.object({
+  status: z.enum(["pending", "done", "error"]),
+  path: z.string().nullable(),
+  error: z.string().nullable(),
+});
+export type DraftDoor = z.infer<typeof DraftDoor>;
+
+// A theme being made, or made but not yet accepted. Written only by functions. `updatedAt` is a Date here
+// (readers convert the Firestore Timestamp before parsing).
+export const ThemeDraft = z.object({
+  status: z.enum(["running", "done", "error"]),
+  error: z.string().nullable(),
+  updatedAt: z.date(),
+  prompt: z.string(),
+  colors: ThemeColors.nullable(),
+  motifs: z.array(z.string()),
+  styleImage: z.string().nullable(),
+  doors: z.record(DoorKey, DraftDoor),
+});
+export type ThemeDraft = z.infer<typeof ThemeDraft>;
+
 // Door number ("1".."24") → Storage path of the picture on that door (see `storagePaths.doorImage`).
-export const DoorImages = z.record(z.string().regex(/^([1-9]|1\d|2[0-4])$/), z.string());
+export const DoorImages = z.record(DoorKey, z.string());
 export type DoorImages = z.infer<typeof DoorImages>;
 
 export const CalendarDoc = z.object({
@@ -177,6 +212,10 @@ export const CalendarDoc = z.object({
   // Chosen by adults. Missing in calendars made before these existed.
   theme: Theme.default("jul"),
   doorImages: DoorImages.default({}),
+  // Set by functions when an adult accepts a theme draft; clients never write it. "egen" needs it.
+  customTheme: CustomTheme.optional(),
+  // Set by functions while a theme is made; clients never write it.
+  themeDraft: ThemeDraft.optional(),
 });
 export type CalendarDoc = z.infer<typeof CalendarDoc>;
 

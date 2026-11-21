@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
-import { THEMES, type Theme, paths, storagePaths } from "@meling/shared";
+import { FIXED_THEMES, type Theme, paths, storagePaths } from "@meling/shared";
 import { db, storage } from "../../firebase";
 import { ChildFrame, DAYS, THEME_LABELS, doorFace } from "./Doors";
 import { useCalendar } from "./useCalendar";
@@ -132,7 +132,7 @@ export function AppearancePage() {
         <h2>Tema</h2>
         <p className="muted">Fargene {calendar.childName} får på kalenderen sin.</p>
         <div className="theme-choices" role="radiogroup" aria-label="Tema">
-          {THEMES.map((theme) => (
+          {FIXED_THEMES.map((theme) => (
             <label key={theme} className={`theme-choice${calendar.theme === theme ? " chosen" : ""}`}>
               <input
                 type="radio"

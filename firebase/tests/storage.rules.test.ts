@@ -116,6 +116,18 @@ describe("storage julekalender", () => {
     );
   });
 
+  it("adults read but cannot write theme drafts", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await uploadBytes(ref(ctx.storage(), storagePaths.themeDraftDoor("2026-ida", 1, "a")), bytes(), {
+        contentType: "image/jpeg",
+      });
+    });
+    const st = env.authenticatedContext("amund").storage();
+    const draft = ref(st, storagePaths.themeDraftDoor("2026-ida", 1, "a"));
+    await assertSucceeds(getBytes(draft));
+    await assertFails(uploadBytes(draft, bytes(), { contentType: "image/jpeg" }));
+  });
+
   it("adults cannot write page images or cutouts", async () => {
     const st = env.authenticatedContext("amund").storage();
     await assertFails(

@@ -8,6 +8,7 @@ export const THEME_LABELS: Record<Theme, string> = {
   vinter: "Vinter",
   skog: "Skog",
   natt: "Natt",
+  egen: "Eget",
 };
 
 /** What a door looks like: its picture if it has one, else the theme's colour. Goes on the door element. */

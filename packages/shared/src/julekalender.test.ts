@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { Bbox, DOOR_COUNT, Plan, type Step, calendarId, paths, stepId, wholePageSteps } from "./index";
+import {
+  Bbox,
+  CalendarDoc,
+  CustomTheme,
+  DOOR_COUNT,
+  Plan,
+  type Step,
+  ThemeColors,
+  calendarId,
+  isAiDoorImage,
+  paths,
+  stepId,
+  storagePaths,
+  wholePageSteps,
+} from "./index";
 
 describe("julekalender", () => {
   it("Plan requires exactly 24 days", () => {
@@ -20,6 +34,57 @@ describe("julekalender", () => {
   it("stepId and calendarId formats", () => {
     expect(stepId("m1", 3, 0)).toBe("m1:3:0");
     expect(calendarId(2026, "u1")).toBe("2026-u1");
+  });
+});
+
+describe("custom theme", () => {
+  const colors = { bg: "#a3262a", door: "#a3262a", done: "#a3262a", accent: "#a3262a", text: "#a3262a" };
+  const doors = Object.fromEntries(
+    Array.from({ length: 24 }, (_, i) => [String(i + 1), { status: "done", path: `p${i + 1}`, error: null }]),
+  );
+
+  it("CalendarDoc accepts the custom theme and a finished draft", () => {
+    const doc = CalendarDoc.parse({
+      year: 2026,
+      childUid: "ida",
+      childName: "Ida",
+      wishes: { balance: "bricks", text: "" },
+      currentVersion: null,
+      draft: "waiting",
+      draftError: null,
+      createdBy: "amund",
+      theme: "egen",
+      customTheme: { prompt: "LEGO-jul", colors },
+      themeDraft: {
+        status: "done",
+        error: null,
+        updatedAt: new Date(),
+        prompt: "LEGO-jul",
+        colors,
+        motifs: ["pepperkake"],
+        styleImage: "style.png",
+        doors,
+      },
+    });
+    expect(doc.theme).toBe("egen");
+    expect(doc.themeDraft?.status).toBe("done");
+  });
+
+  it("ThemeColors rejects names and short hex", () => {
+    expect(() => ThemeColors.parse({ ...colors, bg: "red" })).toThrow();
+    expect(() => ThemeColors.parse({ ...colors, bg: "#abc" })).toThrow();
+    expect(ThemeColors.parse(colors)).toEqual(colors);
+  });
+
+  it("CustomTheme rejects an empty or too long prompt", () => {
+    expect(() => CustomTheme.parse({ prompt: "", colors })).toThrow();
+    expect(() => CustomTheme.parse({ prompt: "x".repeat(501), colors })).toThrow();
+    expect(CustomTheme.parse({ prompt: "x".repeat(500), colors }).prompt).toHaveLength(500);
+  });
+
+  it("isAiDoorImage tells AI pictures from uploaded ones", () => {
+    expect(isAiDoorImage(storagePaths.aiDoorImage("2026-ida", 3, "x1"))).toBe(true);
+    expect(isAiDoorImage(storagePaths.doorImage("2026-ida", 3, "mi8k2a"))).toBe(false);
   });
 });
 
