@@ -40,12 +40,13 @@ async function seedCalendar(): Promise<string> {
 }
 
 const readDraft = async (calId: string) => (await db.doc(paths.calendar(calId)).get()).data()!.themeDraft as ThemeDraft;
+const gid = async (calId: string) => (await readDraft(calId)).generationId;
 const exists = async (path: string) => (await bucket.file(path).exists())[0];
 
 describe("theme job", () => {
   it("makes a full draft", async () => {
     const calId = await seedCalendar();
-    await runThemeGeneration(depsWith(fakeThemeAi()), calId, "Dinosaurer", "Ida");
+    await runThemeGeneration(depsWith(fakeThemeAi()), calId, await gid(calId), "Dinosaurer", "Ida");
     const draft = await readDraft(calId);
     expect(draft.status).toBe("done");
     expect(draft.error).toBeNull();
@@ -66,7 +67,7 @@ describe("theme job", () => {
 
   it("marks refused doors as error and finishes the rest", async () => {
     const calId = await seedCalendar();
-    await runThemeGeneration(depsWith(fakeThemeAi({ refuse: new Set(["m3", "m7"]) })), calId, "Dinosaurer", "Ida");
+    await runThemeGeneration(depsWith(fakeThemeAi({ refuse: new Set(["m3", "m7"]) })), calId, await gid(calId), "Dinosaurer", "Ida");
     const draft = await readDraft(calId);
     expect(draft.status).toBe("done");
     for (const d of ["3", "7"]) {
@@ -79,7 +80,7 @@ describe("theme job", () => {
   it("records an error when planning fails", async () => {
     const calId = await seedCalendar();
     const failing: ThemeAi = { ...fakeThemeAi(), planTheme: async () => { throw new Error("nede"); } };
-    await runThemeGeneration(depsWith(failing), calId, "Dinosaurer", "Ida");
+    await runThemeGeneration(depsWith(failing), calId, await gid(calId), "Dinosaurer", "Ida");
     const draft = await readDraft(calId);
     expect(draft.status).toBe("error");
     expect(draft.error).toBeTruthy();
@@ -92,12 +93,12 @@ describe("theme job", () => {
     const fake = fakeThemeAi();
     const styles: string[] = [];
     const deps = depsWith({ ...fake, doorImage: (style, motif, ref) => (styles.push(style), fake.doorImage(style, motif, ref)) });
-    await runThemeGeneration(deps, calId, "Dinosaurer", "Ida");
+    await runThemeGeneration(deps, calId, await gid(calId), "Dinosaurer", "Ida");
     styles.length = 0;
     const before = await readDraft(calId);
     // The caller only flips the status, so the old path stays until the new picture is written.
     await db.doc(paths.calendar(calId)).update({ "themeDraft.doors.5.status": "pending" });
-    await regenerateDraftDoor(deps, calId, 5);
+    await regenerateDraftDoor(deps, calId, await gid(calId), 5);
     const after = await readDraft(calId);
     expect(after.style).toBe("enkle, runde former i julefarger");
     expect(styles).toEqual([after.style]);
@@ -115,7 +116,7 @@ describe("theme job", () => {
       return { theme: d.theme, customTheme: d.customTheme, doorImages: d.doorImages };
     };
     const before = await read();
-    await runThemeGeneration(depsWith(fakeThemeAi()), calId, "Dinosaurer", "Ida");
+    await runThemeGeneration(depsWith(fakeThemeAi()), calId, await gid(calId), "Dinosaurer", "Ida");
     expect(await read()).toEqual(before);
   });
 
@@ -142,7 +143,7 @@ describe("theme job", () => {
   it("drops writes from an old job once the draft has been replaced", async () => {
     const calId = await seedCalendar();
     const { themeAi, release, reachedP } = gated();
-    const running = runThemeGeneration(depsWith(themeAi), calId, "Dinosaurer", "Ida");
+    const running = runThemeGeneration(depsWith(themeAi), calId, await gid(calId), "Dinosaurer", "Ida");
     await reachedP;
     const fresh = { status: "running", error: null, updatedAt: new Date(), prompt: "Nytt", generationId: "ny", style: null, colors: null, motifs: [], styleImage: null, doors: {} };
     await db.doc(paths.calendar(calId)).update({ themeDraft: fresh });
@@ -158,11 +159,27 @@ describe("theme job", () => {
   it("does not bring back a deleted draft", async () => {
     const calId = await seedCalendar();
     const { themeAi, release, reachedP } = gated();
-    const running = runThemeGeneration(depsWith(themeAi), calId, "Dinosaurer", "Ida");
+    const running = runThemeGeneration(depsWith(themeAi), calId, await gid(calId), "Dinosaurer", "Ida");
     await reachedP;
     await db.doc(paths.calendar(calId)).update({ themeDraft: FieldValue.delete() });
     release();
     await running;
     expect((await db.doc(paths.calendar(calId)).get()).data()).not.toHaveProperty("themeDraft");
+  });
+
+  it("does nothing when the draft has another generationId", async () => {
+    const calId = await seedCalendar();
+    const before = await readDraft(calId);
+    const calls: string[] = [];
+    const fake = fakeThemeAi();
+    const themeAi: ThemeAi = {
+      planTheme: (...a) => (calls.push("plan"), fake.planTheme(...a)),
+      styleImage: (...a) => (calls.push("style"), fake.styleImage(...a)),
+      doorImage: (...a) => (calls.push("door"), fake.doorImage(...a)),
+    };
+    await runThemeGeneration(depsWith(themeAi), calId, "en-annen", "Dinosaurer", "Ida");
+    await regenerateDraftDoor(depsWith(themeAi), calId, "en-annen", 5);
+    expect(calls).toEqual([]);
+    expect(await readDraft(calId)).toEqual(before);
   });
 });

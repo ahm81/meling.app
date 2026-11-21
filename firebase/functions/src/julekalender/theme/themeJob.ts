@@ -91,14 +91,13 @@ async function deleteUnusedDraftFiles(deps: ThemeDeps, calId: string): Promise<v
 }
 
 /**
- * Makes a theme draft: plan, style picture and 24 door pictures. The caller has written `themeDraft` as running.
+ * Makes a theme draft: plan, style picture and 24 door pictures. The caller has written `themeDraft` as running with `generationId`; nothing is done if the stored draft has another id.
  * Failures end up in the draft; it never throws for AI errors.
  */
-export async function runThemeGeneration(deps: ThemeDeps, calId: string, prompt: string, childName: string): Promise<void> {
+export async function runThemeGeneration(deps: ThemeDeps, calId: string, generationId: string, prompt: string, childName: string): Promise<void> {
   const { db, bucket, themeAi } = deps;
-  const generationId = await readGenerationId(db, calId);
-  if (!generationId) {
-    logger.info("Tema: fant ikke noe utkast å lage", { calId });
+  if ((await readGenerationId(db, calId)) !== generationId) {
+    logger.info("Tema: utkastet er byttet ut eller borte, ingenting å lage", { calId });
     return;
   }
   const job: Job = { calId, generationId, stale: false };
@@ -144,15 +143,15 @@ export async function runThemeGeneration(deps: ThemeDeps, calId: string, prompt:
 }
 
 /** Makes a new picture for one door of the existing draft. The caller has set the door to pending. */
-export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, day: number): Promise<void> {
+export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, generationId: string, day: number): Promise<void> {
   const { db, bucket, themeAi } = deps;
   const key = `themeDraft.doors.${day}`;
   const draft = (await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined;
-  if (!draft?.generationId) {
-    logger.info("Tema: fant ikke noe utkast å lage ny variant i", { calId, day });
+  if (!draft || draft.generationId !== generationId) {
+    logger.info("Tema: utkastet er byttet ut eller borte, ingen ny variant", { calId, day });
     return;
   }
-  const job: Job = { calId, generationId: draft.generationId, stale: false };
+  const job: Job = { calId, generationId, stale: false };
   try {
     const motif = draft.motifs[day - 1];
     if (!draft.styleImage || !draft.style || !motif) throw new Error("Utkastet mangler stil, stilbilde eller motiv");
