@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type CalendarDoc, DOOR_COUNT, type ThemeDraft, paths } from "@meling/shared";
 import { deleteApp, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import sharp from "sharp";
 import { afterAll, describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ async function seedCalendar(): Promise<string> {
     theme: "default",
     doorImages: { "1": "julekalender/x/door1.jpg" },
     customTheme: { prompt: "gammelt", colors: { bg: "#000000", door: "#111111", done: "#222222", accent: "#333333", text: "#ffffff" } },
-    themeDraft: { status: "running", error: null, updatedAt: new Date(), prompt: "Dinosaurer", colors: null, motifs: [], styleImage: null, doors: {} },
+    themeDraft: { status: "running", error: null, updatedAt: new Date(), prompt: "Dinosaurer", generationId: randomUUID(), style: null, colors: null, motifs: [], styleImage: null, doors: {} },
   });
   return calId;
 }
@@ -117,5 +117,52 @@ describe("theme job", () => {
     const before = await read();
     await runThemeGeneration(depsWith(fakeThemeAi()), calId, "Dinosaurer", "Ida");
     expect(await read()).toEqual(before);
+  });
+
+  /** A ThemeAi whose door picture for motif "m3" waits until `release` is called; `reached` resolves when it is waiting. */
+  function gated() {
+    const fake = fakeThemeAi();
+    let release!: () => void;
+    let reached!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const reachedP = new Promise<void>((r) => (reached = r));
+    const themeAi: ThemeAi = {
+      ...fake,
+      doorImage: async (style, motif, ref) => {
+        if (motif === "m3") {
+          reached();
+          await gate;
+        }
+        return fake.doorImage(style, motif, ref);
+      },
+    };
+    return { themeAi, release, reachedP };
+  }
+
+  it("drops writes from an old job once the draft has been replaced", async () => {
+    const calId = await seedCalendar();
+    const { themeAi, release, reachedP } = gated();
+    const running = runThemeGeneration(depsWith(themeAi), calId, "Dinosaurer", "Ida");
+    await reachedP;
+    const fresh = { status: "running", error: null, updatedAt: new Date(), prompt: "Nytt", generationId: "ny", style: null, colors: null, motifs: [], styleImage: null, doors: {} };
+    await db.doc(paths.calendar(calId)).update({ themeDraft: fresh });
+    release();
+    await running;
+    const draft = (await db.doc(paths.calendar(calId)).get()).data()!.themeDraft;
+    expect(draft).toEqual({ ...fresh, updatedAt: expect.anything() });
+    const [files] = await bucket.getFiles({ prefix: `julekalender/${calId}/themeDraft/` });
+    // Only the old job's style picture (written before the swap) remains; the next run's cleanup removes it.
+    expect(files.filter((f) => !f.name.includes("/style_"))).toHaveLength(0);
+  });
+
+  it("does not bring back a deleted draft", async () => {
+    const calId = await seedCalendar();
+    const { themeAi, release, reachedP } = gated();
+    const running = runThemeGeneration(depsWith(themeAi), calId, "Dinosaurer", "Ida");
+    await reachedP;
+    await db.doc(paths.calendar(calId)).update({ themeDraft: FieldValue.delete() });
+    release();
+    await running;
+    expect((await db.doc(paths.calendar(calId)).get()).data()).not.toHaveProperty("themeDraft");
   });
 });

@@ -61,6 +61,7 @@ describe("custom theme", () => {
         updatedAt: new Date(),
         prompt: "LEGO-jul",
         colors,
+        generationId: "gen1",
         style: "pepperkaker",
         motifs: ["pepperkake"],
         styleImage: "style.png",

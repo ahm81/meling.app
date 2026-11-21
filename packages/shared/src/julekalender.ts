@@ -187,6 +187,7 @@ export const ThemeDraft = z.object({
   updatedAt: z.date(),
   prompt: z.string(),
   colors: ThemeColors.nullable(),
+  generationId: z.string().min(1),
   style: z.string().nullable(),
   motifs: z.array(z.string()),
   styleImage: z.string().nullable(),

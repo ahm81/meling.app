@@ -33,20 +33,45 @@ export async function toDoorJpeg(image: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
-// Dotted field paths so parallel door writes never overwrite each other.
-const writeDraft = (db: Firestore, calId: string, fields: Record<string, unknown>) =>
-  db.doc(paths.calendar(calId)).update({ ...fields, "themeDraft.updatedAt": FieldValue.serverTimestamp() });
+/** Which draft a job works on: writes are dropped once `themeDraft` has another generationId (or is gone). */
+type Job = { calId: string; generationId: string; stale: boolean };
 
-async function makeDoor(deps: ThemeDeps, calId: string, day: number, style: string, motif: string, reference: Buffer) {
+const readGenerationId = async (db: Firestore, calId: string): Promise<string | null> =>
+  ((await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined)?.generationId ?? null;
+
+/**
+ * Writes dotted `themeDraft.*` fields (so parallel door writes never overwrite each other), but only while the draft
+ * is still the job's own. Returns false, and marks the job stale, when the write was dropped. Never creates `themeDraft`.
+ */
+async function writeDraft(db: Firestore, job: Job, fields: Record<string, unknown>): Promise<boolean> {
+  const ref = db.doc(paths.calendar(job.calId));
+  const applied = await db.runTransaction(async (tx) => {
+    const draft = (await tx.get(ref)).data()?.themeDraft as { generationId?: string } | undefined;
+    if (draft?.generationId !== job.generationId) return false;
+    tx.update(ref, { ...fields, "themeDraft.updatedAt": FieldValue.serverTimestamp() });
+    return true;
+  });
+  if (!applied) {
+    job.stale = true;
+    logger.info("Tema: utkastet er byttet ut, skriving droppet", { calId: job.calId });
+  }
+  return applied;
+}
+
+async function makeDoor(deps: ThemeDeps, job: Job, day: number, style: string, motif: string, reference: Buffer) {
   const { db, bucket, themeAi } = deps;
+  if (job.stale) return;
+  const key = `themeDraft.doors.${day}`;
   try {
     const jpeg = await toDoorJpeg(await themeAi.doorImage(style, motif, reference));
-    const path = storagePaths.themeDraftDoor(calId, day, newId());
+    const path = storagePaths.themeDraftDoor(job.calId, day, newId());
     await bucket.file(path).save(jpeg, { contentType: "image/jpeg" });
-    await writeDraft(db, calId, { [`themeDraft.doors.${day}`]: { status: "done", path, error: null } });
+    if (!(await writeDraft(db, job, { [key]: { status: "done", path, error: null } }))) {
+      await bucket.file(path).delete({ ignoreNotFound: true }).catch(() => undefined);
+    }
   } catch (e) {
-    logger.error("Tema: døra feilet", { calId, day, error: e instanceof Error ? e.message : String(e) });
-    await writeDraft(db, calId, { [`themeDraft.doors.${day}`]: { status: "error", path: null, error: doorError(e) } });
+    logger.error("Tema: døra feilet", { calId: job.calId, day, error: e instanceof Error ? e.message : String(e) });
+    await writeDraft(db, job, { [key]: { status: "error", path: null, error: doorError(e) } });
   }
 }
 
@@ -71,40 +96,50 @@ async function deleteUnusedDraftFiles(deps: ThemeDeps, calId: string): Promise<v
  */
 export async function runThemeGeneration(deps: ThemeDeps, calId: string, prompt: string, childName: string): Promise<void> {
   const { db, bucket, themeAi } = deps;
+  const generationId = await readGenerationId(db, calId);
+  if (!generationId) {
+    logger.info("Tema: fant ikke noe utkast å lage", { calId });
+    return;
+  }
+  const job: Job = { calId, generationId, stale: false };
   try {
     let plan;
     try {
       plan = await themeAi.planTheme(prompt, childName);
     } catch (e) {
       logger.error("Tema: planlegging feilet", { calId, error: e instanceof Error ? e.message : String(e) });
-      await writeDraft(db, calId, { "themeDraft.status": "error", "themeDraft.error": PLAN_FAILED_MESSAGE });
+      await writeDraft(db, job, { "themeDraft.status": "error", "themeDraft.error": PLAN_FAILED_MESSAGE });
       return;
     }
     const doors = Object.fromEntries(
       Array.from({ length: DOOR_COUNT }, (_, i) => [String(i + 1), { status: "pending", path: null, error: null }]),
     );
-    await writeDraft(db, calId, { "themeDraft.colors": plan.colors, "themeDraft.style": plan.style, "themeDraft.motifs": plan.motifs, "themeDraft.doors": doors });
+    await writeDraft(db, job, { "themeDraft.colors": plan.colors, "themeDraft.style": plan.style, "themeDraft.motifs": plan.motifs, "themeDraft.doors": doors });
 
     let reference: Buffer;
     try {
       reference = await sharp(await themeAi.styleImage(plan.style)).png().toBuffer();
       const path = storagePaths.themeDraftStyle(calId, newId());
       await bucket.file(path).save(reference, { contentType: "image/png" });
-      await writeDraft(db, calId, { "themeDraft.styleImage": path });
+      if (!(await writeDraft(db, job, { "themeDraft.styleImage": path }))) {
+        await bucket.file(path).delete({ ignoreNotFound: true }).catch(() => undefined);
+        return;
+      }
     } catch (e) {
       logger.error("Tema: stilbildet feilet", { calId, error: e instanceof Error ? e.message : String(e) });
-      await writeDraft(db, calId, { "themeDraft.status": "error", "themeDraft.error": STYLE_FAILED_MESSAGE });
+      await writeDraft(db, job, { "themeDraft.status": "error", "themeDraft.error": STYLE_FAILED_MESSAGE });
       return;
     }
 
     const days = Array.from({ length: DOOR_COUNT }, (_, i) => i + 1);
-    await forEachLimited(days, MAX_CONCURRENT_IMAGES, (day) => makeDoor(deps, calId, day, plan.style, plan.motifs[day - 1]!, reference));
-    await writeDraft(db, calId, { "themeDraft.status": "done", "themeDraft.error": null });
-    await deleteUnusedDraftFiles(deps, calId);
+    await forEachLimited(days, MAX_CONCURRENT_IMAGES, (day) => makeDoor(deps, job, day, plan.style, plan.motifs[day - 1]!, reference));
+    if (await writeDraft(db, job, { "themeDraft.status": "done", "themeDraft.error": null })) {
+      await deleteUnusedDraftFiles(deps, calId);
+    }
   } catch (e) {
     // Unexpected (a Firestore or Storage failure): record it so the draft does not stay running.
     logger.error("Tema: uventet feil", { calId, error: e instanceof Error ? e.message : String(e) });
-    await writeDraft(db, calId, { "themeDraft.status": "error", "themeDraft.error": PLAN_FAILED_MESSAGE }).catch(() => undefined);
+    await writeDraft(db, job, { "themeDraft.status": "error", "themeDraft.error": PLAN_FAILED_MESSAGE }).catch(() => undefined);
   }
 }
 
@@ -112,20 +147,27 @@ export async function runThemeGeneration(deps: ThemeDeps, calId: string, prompt:
 export async function regenerateDraftDoor(deps: ThemeDeps, calId: string, day: number): Promise<void> {
   const { db, bucket, themeAi } = deps;
   const key = `themeDraft.doors.${day}`;
-  let oldPath: string | null = null;
+  const draft = (await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined;
+  if (!draft?.generationId) {
+    logger.info("Tema: fant ikke noe utkast å lage ny variant i", { calId, day });
+    return;
+  }
+  const job: Job = { calId, generationId: draft.generationId, stale: false };
   try {
-    const draft = (await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined;
-    const motif = draft?.motifs[day - 1];
-    if (!draft?.styleImage || !draft.style || !motif) throw new Error("Utkastet mangler stil, stilbilde eller motiv");
-    oldPath = draft.doors[String(day)]?.path ?? null;
+    const motif = draft.motifs[day - 1];
+    if (!draft.styleImage || !draft.style || !motif) throw new Error("Utkastet mangler stil, stilbilde eller motiv");
+    const oldPath = draft.doors[String(day)]?.path ?? null;
     const [reference] = await bucket.file(draft.styleImage).download();
     const jpeg = await toDoorJpeg(await themeAi.doorImage(draft.style, motif, reference));
     const path = storagePaths.themeDraftDoor(calId, day, newId());
     await bucket.file(path).save(jpeg, { contentType: "image/jpeg" });
-    await writeDraft(db, calId, { [key]: { status: "done", path, error: null } });
+    if (!(await writeDraft(db, job, { [key]: { status: "done", path, error: null } }))) {
+      await bucket.file(path).delete({ ignoreNotFound: true }).catch(() => undefined);
+      return;
+    }
     if (oldPath) await bucket.file(oldPath).delete({ ignoreNotFound: true }).catch((e) => logger.error("Tema: kunne ikke slette gammelt bilde", { calId, day, error: String(e) }));
   } catch (e) {
     logger.error("Tema: ny variant feilet", { calId, day, error: e instanceof Error ? e.message : String(e) });
-    await writeDraft(db, calId, { [key]: { status: "error", path: null, error: doorError(e) } });
+    await writeDraft(db, job, { [key]: { status: "error", path: null, error: doorError(e) } });
   }
 }
