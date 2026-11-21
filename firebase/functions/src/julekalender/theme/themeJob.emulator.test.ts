@@ -147,13 +147,15 @@ describe("theme job", () => {
     await reachedP;
     const fresh = { status: "running", error: null, updatedAt: new Date(), prompt: "Nytt", generationId: "ny", style: null, colors: null, motifs: [], styleImage: null, doors: {} };
     await db.doc(paths.calendar(calId)).update({ themeDraft: fresh });
+    const [beforeFiles] = await bucket.getFiles({ prefix: `julekalender/${calId}/themeDraft/` });
     release();
     await running;
     const draft = (await db.doc(paths.calendar(calId)).get()).data()!.themeDraft;
     expect(draft).toEqual({ ...fresh, updatedAt: expect.anything() });
     const [files] = await bucket.getFiles({ prefix: `julekalender/${calId}/themeDraft/` });
-    // Only the old job's style picture (written before the swap) remains; the next run's cleanup removes it.
-    expect(files.filter((f) => !f.name.includes("/style_"))).toHaveLength(0);
+    // Files written before the swap may remain (the next run's cleanup removes them); nothing is added after it.
+    const known = new Set(beforeFiles.map((f) => f.name));
+    expect(files.filter((f) => !known.has(f.name))).toHaveLength(0);
   });
 
   it("does not bring back a deleted draft", async () => {

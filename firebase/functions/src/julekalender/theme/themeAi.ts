@@ -3,6 +3,8 @@
 //   image output $60 per 1M tokens; a 1K (about 1 MP) picture is 1120 tokens, about $0.067 each.
 //   image input $0.50 per 1M tokens; the reference picture is 1120 tokens, under $0.001 per call.
 //   25 pictures (1 style + 24 doors) is about $1.70. The planning call (text) is a fraction of a cent.
+// In the trial the per-minute image quota (429) was hit at 4 parallel pictures; the job runs 2 at a time and image
+// calls retry with longer delays.
 // Re-generating a single door costs one picture. Prices change: check the page again before relying on this.
 import { ThemeColors } from "@meling/shared";
 import sharp from "sharp";
@@ -59,6 +61,9 @@ const stylePrompt = (style: string) => `Lag et bilde som viser stilen: ${style}.
 const doorPrompt = (style: string, motif: string) =>
   `Lag et bilde av: ${motif}. Samme stil som referansebildet. Stil: ${style}.\n${IMAGE_RULES}`;
 
+/** Image calls hit the per-minute quota (429) easily, so they wait longer and try more often than the planning call. */
+const IMAGE_RETRY: RetryOptions = { attempts: 5, delaysMs: [5000, 15000, 30000, 60000] };
+
 export function vertexThemeAi(client?: GenerateClient, retry: RetryOptions = {}): ThemeAi {
   const c = () => client ?? clientFor(geminiConfig().location);
 
@@ -101,7 +106,7 @@ export function vertexThemeAi(client?: GenerateClient, retry: RetryOptions = {})
         return Buffer.from(data, "base64");
       },
       (e) => !(e instanceof ImageRefusedError) && isRetryable(e),
-      retry,
+      { ...IMAGE_RETRY, ...retry },
     );
 
   return {

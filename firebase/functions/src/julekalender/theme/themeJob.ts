@@ -10,7 +10,7 @@ import { ImageRefusedError, type ThemeAi } from "./themeAi";
 type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 export type ThemeDeps = { db: Firestore; bucket: Bucket; themeAi: ThemeAi };
 
-export const MAX_CONCURRENT_IMAGES = 4;
+export const MAX_CONCURRENT_IMAGES = 2;
 const DOOR_SIDE = 640;
 
 const REFUSED_MESSAGE = "Bildet ble avvist av AI-en. Prøv «Ny variant».";
