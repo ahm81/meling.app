@@ -11,11 +11,14 @@ type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 export type ThemeDeps = { db: Firestore; bucket: Bucket; themeAi: ThemeAi };
 
 export const MAX_CONCURRENT_IMAGES = 2;
+/** Below the 1800 s callable timeout: doors not started by then are marked as errors so the job ends cleanly. */
+export const GENERATION_DEADLINE_MS = 25 * 60_000;
 const DOOR_SIDE = 640;
 
 const REFUSED_MESSAGE = "Bildet ble avvist av AI-en. Prøv «Ny variant».";
 const FAILED_MESSAGE = "Kunne ikke lage bildet.";
 const PLAN_FAILED_MESSAGE = "Kunne ikke lage temaet. Prøv igjen.";
+const DEADLINE_MESSAGE = "Tidsfristen gikk ut. Prøv «Ny variant».";
 const STYLE_FAILED_MESSAGE = "Kunne ikke lage stilbildet. Prøv igjen.";
 
 const newId = () => randomUUID().replaceAll("-", "");
@@ -34,7 +37,7 @@ export async function toDoorJpeg(image: Buffer): Promise<Buffer> {
 }
 
 /** Which draft a job works on: writes are dropped once `themeDraft` has another generationId (or is gone). */
-type Job = { calId: string; generationId: string; stale: boolean };
+type Job = { calId: string; generationId: string; stale: boolean; deadline?: number };
 
 const readGenerationId = async (db: Firestore, calId: string): Promise<string | null> =>
   ((await db.doc(paths.calendar(calId)).get()).data()?.themeDraft as ThemeDraft | undefined)?.generationId ?? null;
@@ -62,6 +65,10 @@ async function makeDoor(deps: ThemeDeps, job: Job, day: number, style: string, m
   const { db, bucket, themeAi } = deps;
   if (job.stale) return;
   const key = `themeDraft.doors.${day}`;
+  if (job.deadline !== undefined && Date.now() >= job.deadline) {
+    await writeDraft(db, job, { [key]: { status: "error", path: null, error: DEADLINE_MESSAGE } });
+    return;
+  }
   try {
     const jpeg = await toDoorJpeg(await themeAi.doorImage(style, motif, reference));
     const path = storagePaths.themeDraftDoor(job.calId, day, newId());
@@ -94,13 +101,13 @@ async function deleteUnusedDraftFiles(deps: ThemeDeps, calId: string): Promise<v
  * Makes a theme draft: plan, style picture and 24 door pictures. The caller has written `themeDraft` as running with `generationId`; nothing is done if the stored draft has another id.
  * Failures end up in the draft; it never throws for AI errors.
  */
-export async function runThemeGeneration(deps: ThemeDeps, calId: string, generationId: string, prompt: string, childName: string): Promise<void> {
+export async function runThemeGeneration(deps: ThemeDeps, calId: string, generationId: string, prompt: string, childName: string, deadlineMs = GENERATION_DEADLINE_MS): Promise<void> {
   const { db, bucket, themeAi } = deps;
   if ((await readGenerationId(db, calId)) !== generationId) {
     logger.info("Tema: utkastet er byttet ut eller borte, ingenting å lage", { calId });
     return;
   }
-  const job: Job = { calId, generationId, stale: false };
+  const job: Job = { calId, generationId, stale: false, deadline: Date.now() + deadlineMs };
   try {
     let plan;
     try {

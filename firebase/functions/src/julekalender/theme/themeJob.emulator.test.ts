@@ -77,6 +77,20 @@ describe("theme job", () => {
     expect(Object.values(draft.doors).filter((d) => d.status === "done")).toHaveLength(22);
   });
 
+  it("marks doors not started before the deadline as error and still finishes", async () => {
+    const calId = await seedCalendar();
+    const calls: string[] = [];
+    const fake = fakeThemeAi();
+    const themeAi: ThemeAi = { ...fake, doorImage: (...a) => (calls.push("door"), fake.doorImage(...a)) };
+    await runThemeGeneration(depsWith(themeAi), calId, await gid(calId), "Dinosaurer", "Ida", -1);
+    const draft = await readDraft(calId);
+    expect(draft.status).toBe("done");
+    expect(calls).toEqual([]);
+    for (const door of Object.values(draft.doors)) {
+      expect(door).toEqual({ status: "error", path: null, error: "Tidsfristen gikk ut. Prøv «Ny variant»." });
+    }
+  });
+
   it("records an error when planning fails", async () => {
     const calId = await seedCalendar();
     const failing: ThemeAi = { ...fakeThemeAi(), planTheme: async () => { throw new Error("nede"); } };
