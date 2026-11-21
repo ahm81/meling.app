@@ -5,8 +5,9 @@ import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fakeThemeAi } from "./themeAi";
-import { applyThemeDraftHandler, generateThemeHandler, regenerateDoorHandler } from "./themeCallables";
+import { type ThemeCallableDeps, type ThemeEnqueue, applyThemeDraftHandler, generateThemeHandler, regenerateDoorHandler } from "./themeCallables";
 import type { ThemeDeps } from "./themeJob";
+import { runThemeDoorTaskHandler, runThemeGenerationTaskHandler } from "./themeTasks";
 
 // Never the real project: these tests only run against the emulators started by `pnpm test:functions`.
 if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_STORAGE_EMULATOR_HOST) {
@@ -17,7 +18,17 @@ const db = getFirestore(app);
 const bucket = getStorage(app).bucket();
 afterAll(() => deleteApp(app));
 
-const deps = (): ThemeDeps => ({ db, bucket, themeAi: fakeThemeAi() });
+const baseDeps = (): ThemeDeps => ({ db, bucket, themeAi: fakeThemeAi() });
+/** Runs the task right away and waits for it, as if Cloud Tasks had dispatched it. */
+const inlineEnqueue = (base: ThemeDeps): ThemeEnqueue => ({
+  generation: (payload) => runThemeGenerationTaskHandler(base, payload),
+  door: (payload) => runThemeDoorTaskHandler(base, payload),
+});
+const deps = (enqueue?: Partial<ThemeEnqueue>): ThemeCallableDeps => {
+  const base = baseDeps();
+  return { ...base, enqueue: { ...inlineEnqueue(base), ...enqueue } };
+};
+const ENQUEUE_FAILED = "Kunne ikke starte jobben. Prøv igjen.";
 const as = (uid: string, data: unknown) => ({ auth: { uid }, data });
 const colors: ThemeColors = { bg: "#101010", door: "#202020", done: "#303030", accent: "#404040", text: "#f0f0f0" };
 
@@ -124,6 +135,25 @@ describe("generateTheme", () => {
     await generateThemeHandler(deps(), as("amund", { calendarId: calId, prompt: "Dinosaurer" }));
     expect((await draftOf(calId)).status).toBe("done");
   });
+
+  it("generateTheme returns before the job runs", async () => {
+    const calId = await seedCalendar();
+    const recorded: unknown[] = [];
+    const result = await generateThemeHandler(deps({ generation: async (p) => void recorded.push(p) }), as("amund", { calendarId: calId, prompt: " Dinosaurer " }));
+    expect(result).toEqual({ ok: true });
+    const draft = await draftOf(calId);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toEqual({ calendarId: calId, generationId: draft.generationId, prompt: "Dinosaurer", childName: "Ida" });
+    expect(draft.status).toBe("running");
+    expect(draft.doors).toEqual({});
+  });
+
+  it("generateTheme marks the draft error when enqueuing fails", async () => {
+    const calId = await seedCalendar();
+    const failing = deps({ generation: () => Promise.reject(new Error("queue down")) });
+    await expect(generateThemeHandler(failing, as("amund", { calendarId: calId, prompt: "Dinosaurer" }))).rejects.toMatchObject({ code: "unavailable", message: ENQUEUE_FAILED });
+    expect(await draftOf(calId)).toMatchObject({ status: "error", error: ENQUEUE_FAILED });
+  });
 });
 
 describe("regenerateDoor", () => {
@@ -154,6 +184,36 @@ describe("regenerateDoor", () => {
     expect(draft.doors["3"]!.status).toBe("done");
     expect(draft.doors["3"]!.path).not.toBe(old["3"]);
     expect(await exists(old["3"]!)).toBe(false);
+  });
+
+  it("regenerateDoor returns before the job runs", async () => {
+    const calId = await seedCalendar();
+    const old = await seedDraft(calId);
+    const recorded: unknown[] = [];
+    const result = await regenerateDoorHandler(deps({ door: async (p) => void recorded.push(p) }), as("amund", { calendarId: calId, day: 3 }));
+    expect(result).toEqual({ ok: true });
+    const draft = await draftOf(calId);
+    expect(recorded).toEqual([{ calendarId: calId, generationId: draft.generationId, day: 3 }]);
+    expect(draft.doors["3"]).toMatchObject({ status: "pending", path: old["3"] });
+  });
+
+  it("regenerateDoor keeps the old picture when enqueuing fails", async () => {
+    const calId = await seedCalendar();
+    const old = await seedDraft(calId);
+    const failing = deps({ door: () => Promise.reject(new Error("queue down")) });
+    await expect(regenerateDoorHandler(failing, as("amund", { calendarId: calId, day: 3 }))).rejects.toMatchObject({ code: "unavailable", message: ENQUEUE_FAILED });
+    const draft = await draftOf(calId);
+    expect(draft.doors["3"]).toEqual({ status: "done", path: old["3"], error: ENQUEUE_FAILED });
+    expect(draft.status).toBe("done");
+    expect(await exists(old["3"]!)).toBe(true);
+  });
+
+  it("regenerateDoor marks a door without a picture error when enqueuing fails", async () => {
+    const calId = await seedCalendar();
+    await seedDraft(calId, [3]);
+    const failing = deps({ door: () => Promise.reject(new Error("queue down")) });
+    await expect(regenerateDoorHandler(failing, as("amund", { calendarId: calId, day: 3 }))).rejects.toMatchObject({ code: "unavailable" });
+    expect((await draftOf(calId)).doors["3"]).toEqual({ status: "error", path: null, error: ENQUEUE_FAILED });
   });
 });
 

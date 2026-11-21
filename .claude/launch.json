@@ -10,7 +10,7 @@
     {
       "name": "emulators-functions",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["exec", "firebase", "emulators:start", "--only", "auth,firestore,storage,functions"],
+      "runtimeArgs": ["exec", "firebase", "emulators:start", "--only", "auth,firestore,storage,functions,tasks"],
       "port": 4000
     },
     {

@@ -134,6 +134,24 @@ Klienter leser Firestore-timestamps og gjør dem om til `Date` før de parser me
 
 `baseVersion` må være `currentVersion`; ellers svarer funksjonen `failed-precondition` (noen andre har endret planen).
 
+AI-temaet har egne callables (samme region og krav):
+
+| Funksjon          | Gjør                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| `generateTheme`   | `{ calendarId, prompt }`: skriver et nytt `themeDraft` i `running`, legger jobben i køen til `runThemeGenerationTask` og svarer `{ ok: true }` med en gang |
+| `regenerateDoor`  | `{ calendarId, day }`: setter luka til `pending`, legger jobben i køen til `runThemeDoorTask` og svarer `{ ok: true }` med en gang |
+| `applyThemeDraft` | `{ calendarId, keepUploaded }`: gjør det ferdige utkastet til kalenderens tema (kopierer lukebildene, setter `theme` og `customTheme`) |
+
+Selve jobbene er Cloud Tasks-funksjoner (`onTaskDispatched`), så de fullføres selv om fanen lukkes. Ingen klient kaller dem:
+
+| Funksjon                 | Gjør                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `runThemeGenerationTask` | `{ calendarId, generationId, prompt, childName }`: lager plan, stilbilde og 24 lukebilder (inntil 30 min, 1 forsøk, 2 samtidig) |
+| `runThemeDoorTask`       | `{ calendarId, generationId, day }`: lager en ny variant av én luke (inntil 9 min, 1 forsøk, 4 samtidig) |
+
+Ugyldige oppgaver logges og droppes. Kan jobben ikke legges i køen, settes utkastet (eller luka) til feil med «Kunne
+ikke starte jobben. Prøv igjen.» og callable svarer `unavailable`; en luke med et ferdig bilde beholder det.
+
 ## Storage
 
 Alt utenom `julekalender/` er lesbart og skrivbart for medlemmer, og stengt for alle andre.

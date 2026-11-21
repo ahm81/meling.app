@@ -42,15 +42,16 @@ COMPUTE_SA="$PROJECT_NUMBER-compute@developer.gserviceaccount.com"
 # enable APIs or change project IAM, so a project owner runs these once (re-running is harmless:
 # enabling an enabled API and adding an existing binding are no-ops).
 # ---------------------------------------------------------------------------------------------
-echo "APIs for Cloud Functions 2nd gen, Firestore triggers, rules and Vertex AI"
+echo "APIs for Cloud Functions 2nd gen, Firestore triggers, rules, Vertex AI and Cloud Tasks"
 # cloudfunctions/run/cloudbuild/artifactregistry: build and run 2nd gen functions on Cloud Run.
 # eventarc/pubsub: Firestore-triggered functions (onManualCreated) are delivered by Eventarc over Pub/Sub.
 # firebaserules: storage.rules call firestore.get() across services.
 # aiplatform: the julekalender functions call Gemini through Vertex AI.
+# cloudtasks: the AI theme jobs run as task-queue functions (onTaskDispatched), so they survive a closed tab.
 gcloud services enable --project "$PROJECT" \
   cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com eventarc.googleapis.com pubsub.googleapis.com \
-  firebaserules.googleapis.com aiplatform.googleapis.com
+  firebaserules.googleapis.com aiplatform.googleapis.com cloudtasks.googleapis.com
 
 echo "Service agents and the functions runtime"
 # Enabling an API does not always create its service agent; create them before granting to them.
@@ -76,6 +77,14 @@ grant "$COMPUTE_SA" roles/cloudbuild.builds.builder
 # The julekalender functions call Gemini through Vertex AI as the default compute service account
 # (Application Default Credentials, no key).
 grant "$COMPUTE_SA" roles/aiplatform.user
+# The theme callables (generateTheme, regenerateDoor) enqueue tasks with the Admin SDK as the default compute
+# service account: creating a task needs cloudtasks.tasks.create (enqueuer). Cloud Tasks then calls the task
+# function with an OIDC token for that same account (run.invoker above), and attaching an account to a task needs
+# actAs on it, so the account is a Service Account User of itself (Firebase "Enqueue functions with Cloud Tasks").
+grant "$COMPUTE_SA" roles/cloudtasks.enqueuer
+echo "  roles/iam.serviceAccountUser on $COMPUTE_SA (itself)"
+gcloud iam service-accounts add-iam-policy-binding "$COMPUTE_SA" --project "$PROJECT" \
+  --member="serviceAccount:$COMPUTE_SA" --role=roles/iam.serviceAccountUser --quiet >/dev/null
 # --------------------------------------------------------------------------------- end one-time
 
 echo "Service account $DEPLOY_SA"
@@ -83,9 +92,11 @@ ensure_sa github-deployer "GitHub Actions deploy ($REPO, production)"
 # Hosting, rules and indexes (firebase.admin), Cloud Functions 2nd gen (cloudfunctions.admin,
 # run.viewer, artifactregistry.admin for the image cleanup policy), reading the API key config
 # during hosting deploys (apiKeysViewer), and checking that required APIs are enabled
-# (serviceUsageViewer; the CLI does this before every deploy).
+# (serviceUsageViewer; the CLI does this before every deploy). Deploying task-queue functions creates and
+# updates their Cloud Tasks queues (retry and rate limits), which needs cloudtasks.queueAdmin.
 for role in roles/firebase.admin roles/cloudfunctions.admin roles/run.viewer \
-  roles/artifactregistry.admin roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer; do
+  roles/artifactregistry.admin roles/serviceusage.apiKeysViewer roles/serviceusage.serviceUsageViewer \
+  roles/cloudtasks.queueAdmin; do
   grant "$DEPLOY_SA" "$role"
 done
 # Why cloudfunctions.admin and not cloudfunctions.developer: both include eventarc.triggers.create (the

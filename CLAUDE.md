@@ -66,8 +66,9 @@ Start med launch-argumentet `-useEmulators` for å bruke lokale emulatorer.
   `github-deployer` (full deploy, kun GitHub-miljøet `production`, som bare `main` kan bruke) og
   `github-preview` (kun Hosting, kun GitHub-miljøet `preview`).
   Engangsoppsett: `scripts/setup-github-deploy.sh`. Den må kjøres (av en prosjekteier) før første deploy av functions:
-  den slår på API-ene for Functions 2. gen, Eventarc, Pub/Sub, regler og Vertex AI og gir tjenesteagentene rollene
-  Firestore-triggere og `firestore.get` i `storage.rules` trenger. Repo-variablene er
+  den slår på API-ene for Functions 2. gen, Eventarc, Pub/Sub, regler, Vertex AI og Cloud Tasks og gir tjenesteagentene rollene
+  Firestore-triggere og `firestore.get` i `storage.rules` trenger. Runtime-kontoen får legge oppgaver i Cloud Tasks-køene
+  (`cloudtasks.enqueuer` og `iam.serviceAccountUser` på seg selv), og `github-deployer` får `cloudtasks.queueAdmin`. Repo-variablene er
   `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` og `GCP_PREVIEW_SERVICE_ACCOUNT`.
 - En prosjekteier setter opp et budsjettvarsel i Cloud Billing for `meling-app` (Billing → Budgets & alerts) før AI-temaet
   tas i bruk. Beløp og mottaker committes ikke.

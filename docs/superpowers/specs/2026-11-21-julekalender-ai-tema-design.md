@@ -150,3 +150,7 @@ farge per luke. Da kan emulatoren og testene kjøres uten nettverk.
   sikkerhetsfilteret håndteres for én luke (for eksempel prøve igjen én gang med omskrevet motiv).
 - Opprydding av gamle utkastbilder i Storage.
 - Eksakte prompter, og et prøveskript à la `try-analysis` for å teste stil og varemerkeformulering.
+
+**Endring etter gjennomgang:** arbeidet kjører ikke i callable, men på en Cloud Tasks-kø (`runThemeGenerationTask` og
+`runThemeDoorTask` med `onTaskDispatched`). `generateTheme` og `regenerateDoor` sjekker, skriver utkastet og legger
+jobben i køen, og svarer med en gang. Slik fullføres temaet selv om den voksne lukker fanen.

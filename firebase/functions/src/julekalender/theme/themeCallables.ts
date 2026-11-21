@@ -7,7 +7,12 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { z } from "zod";
 import { type CallRequest, Id, STALE_MS, requireAdult } from "../callables";
 import { themeAiFromEnv } from "./themeAi";
-import { type ThemeDeps, regenerateDraftDoor, runThemeGeneration } from "./themeJob";
+import { type ThemeDeps, writeDraftIfCurrent } from "./themeJob";
+import { type ThemeDoorPayload, type ThemeGenerationPayload, cloudTasksEnqueue } from "./themeTasks";
+
+/** Starts the theme jobs on their task queues. Injected so tests can run the job inline or record the payload. */
+export type ThemeEnqueue = { generation(payload: ThemeGenerationPayload): Promise<void>; door(payload: ThemeDoorPayload): Promise<void> };
+export type ThemeCallableDeps = ThemeDeps & { enqueue: ThemeEnqueue };
 
 function parseInput<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -37,17 +42,32 @@ function isFresh(draft: RawDraft): boolean {
 const hasPending = (draft: RawDraft) => Object.values(draft.doors ?? {}).some((d) => d.status === "pending");
 
 const ALREADY_RUNNING = "Et tema lages allerede. Prøv igjen om litt.";
+const ENQUEUE_FAILED = "Kunne ikke starte jobben. Prøv igjen.";
+
+/**
+ * Enqueues the job. If that fails, `markFailed` records it in the draft (so it does not stay running or pending) and
+ * the call fails with `unavailable`.
+ */
+async function enqueueOrFail(calId: string, enqueue: () => Promise<void>, markFailed: () => Promise<boolean>): Promise<void> {
+  try {
+    await enqueue();
+  } catch (e) {
+    logger.error("Tema: kunne ikke legge jobben i køen", { calId, error: e instanceof Error ? e.message : String(e) });
+    await markFailed().catch((err) => logger.error("Tema: kunne ikke merke utkastet som feilet", { calId, error: String(err) }));
+    throw new HttpsError("unavailable", ENQUEUE_FAILED);
+  }
+}
 
 // ---- generateTheme
 
 const GenerateThemeInput = z.object({ calendarId: Id, prompt: z.string().trim().min(1).max(500) });
 
 /**
- * Starts a new theme draft and makes it in this call (plan, style picture and 24 door pictures). Refused while a
- * draft is running or has a door being made, unless it has not been written for 15 minutes. Failures in the AI end up
- * in the draft, so the call itself still returns ok.
+ * Starts a new theme draft and enqueues the job that makes it (plan, style picture and 24 door pictures, in
+ * runThemeGenerationTask), then returns at once. Refused while a draft is running or has a door being made, unless it
+ * has not been written for 15 minutes. Failures in the AI end up in the draft.
  */
-export async function generateThemeHandler(deps: ThemeDeps, request: CallRequest): Promise<{ ok: true }> {
+export async function generateThemeHandler(deps: ThemeCallableDeps, request: CallRequest): Promise<{ ok: true }> {
   const { db } = deps;
   await requireAdult(db, request);
   const { calendarId, prompt } = parseInput(GenerateThemeInput, request.data);
@@ -78,7 +98,11 @@ export async function generateThemeHandler(deps: ThemeDeps, request: CallRequest
     return (snap.get("childName") as string | undefined) ?? "";
   });
 
-  await runThemeGeneration(deps, calendarId, generationId, prompt, childName);
+  await enqueueOrFail(
+    calendarId,
+    () => deps.enqueue.generation({ calendarId, generationId, prompt, childName }),
+    () => writeDraftIfCurrent(db, calendarId, generationId, { "themeDraft.status": "error", "themeDraft.error": ENQUEUE_FAILED }),
+  );
   return { ok: true };
 }
 
@@ -86,14 +110,17 @@ export async function generateThemeHandler(deps: ThemeDeps, request: CallRequest
 
 const RegenerateDoorInput = z.object({ calendarId: Id, day: z.int().min(1).max(DOOR_COUNT) });
 
-/** Makes a new picture for one door of a finished plan, in this call. The old picture stays until the new one is written. */
-export async function regenerateDoorHandler(deps: ThemeDeps, request: CallRequest): Promise<{ ok: true }> {
+/**
+ * Enqueues a new picture for one door of a finished plan (runThemeDoorTask) and returns at once. The old picture stays
+ * until the new one is written.
+ */
+export async function regenerateDoorHandler(deps: ThemeCallableDeps, request: CallRequest): Promise<{ ok: true }> {
   const { db } = deps;
   await requireAdult(db, request);
   const { calendarId, day } = parseInput(RegenerateDoorInput, request.data);
   const calRef = db.doc(paths.calendar(calendarId));
 
-  const generationId = await db.runTransaction(async (tx) => {
+  const { generationId, oldPath } = await db.runTransaction(async (tx) => {
     const snap = await tx.get(calRef);
     if (!snap.exists) throw new HttpsError("not-found", "Fant ikke kalenderen.");
     const draft = snap.get("themeDraft") as RawDraft | undefined;
@@ -108,10 +135,18 @@ export async function regenerateDoorHandler(deps: ThemeDeps, request: CallReques
     }
     // Dotted fields: the other doors are untouched, and `path` stays so the job can delete the old file.
     tx.update(calRef, { [`themeDraft.doors.${day}.status`]: "pending", "themeDraft.updatedAt": FieldValue.serverTimestamp() });
-    return draft.generationId;
+    return { generationId: draft.generationId, oldPath: draft.doors?.[String(day)]?.path ?? null };
   });
 
-  await regenerateDraftDoor(deps, calendarId, generationId, day);
+  // As when a variant fails: a good picture is kept (done with the error as a note); a door without one becomes error.
+  await enqueueOrFail(
+    calendarId,
+    () => deps.enqueue.door({ calendarId, generationId, day }),
+    () =>
+      writeDraftIfCurrent(db, calendarId, generationId, {
+        [`themeDraft.doors.${day}`]: oldPath ? { status: "done", path: oldPath, error: ENQUEUE_FAILED } : { status: "error", path: null, error: ENQUEUE_FAILED },
+      }),
+  );
   return { ok: true };
 }
 
@@ -178,10 +213,9 @@ export async function applyThemeDraftHandler({ db, bucket }: ThemeDeps, request:
 
 // ---- onCall wrappers (region europe-west1 from setGlobalOptions)
 
-const deps = (): ThemeDeps => ({ db: getFirestore(), bucket: getStorage().bucket(), themeAi: themeAiFromEnv() });
+const deps = (): ThemeCallableDeps => ({ db: getFirestore(), bucket: getStorage().bucket(), themeAi: themeAiFromEnv(), enqueue: cloudTasksEnqueue() });
 
-// The pictures are made in the call. With 429 backoff (up to ~110 s per image) 24 doors can take far longer than 540 s,
-// so generateTheme gets 1800 s; regenerateDoor makes a single picture and fits in 540 s.
-export const generateTheme = onCall({ timeoutSeconds: 1800, memory: "1GiB" }, (request) => generateThemeHandler(deps(), request));
-export const regenerateDoor = onCall({ timeoutSeconds: 540, memory: "1GiB" }, (request) => regenerateDoorHandler(deps(), request));
+// The pictures are made by the task-queue functions in themeTasks.ts; these calls only check, write and enqueue.
+export const generateTheme = onCall({ timeoutSeconds: 60 }, (request) => generateThemeHandler(deps(), request));
+export const regenerateDoor = onCall({ timeoutSeconds: 60 }, (request) => regenerateDoorHandler(deps(), request));
 export const applyThemeDraft = onCall({ timeoutSeconds: 120 }, (request) => applyThemeDraftHandler(deps(), request));

@@ -11,7 +11,7 @@ type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 export type ThemeDeps = { db: Firestore; bucket: Bucket; themeAi: ThemeAi };
 
 export const MAX_CONCURRENT_IMAGES = 2;
-/** Below the 1800 s callable timeout: doors not started by then are marked as errors so the job ends cleanly. */
+/** Below the 1800 s task timeout (runThemeGenerationTask): doors not started by then are marked as errors so the job ends cleanly. */
 export const GENERATION_DEADLINE_MS = 25 * 60_000;
 const DOOR_SIDE = 640;
 
@@ -60,6 +60,10 @@ async function writeDraft(db: Firestore, job: Job, fields: Record<string, unknow
   }
   return applied;
 }
+
+/** A guarded `themeDraft.*` write for code outside a job (the callables when enqueuing fails). False when dropped. */
+export const writeDraftIfCurrent = (db: Firestore, calId: string, generationId: string, fields: Record<string, unknown>): Promise<boolean> =>
+  writeDraft(db, { calId, generationId, stale: false }, fields);
 
 async function makeDoor(deps: ThemeDeps, job: Job, day: number, style: string, motif: string, reference: Buffer) {
   const { db, bucket, themeAi } = deps;
